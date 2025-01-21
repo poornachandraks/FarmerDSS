@@ -60,30 +60,7 @@ def dashboard():
     c = conn.cursor()
     
     try:
-        # Get weather data for a default location
-        weather_data = get_weather_data(latitude=28.6139, longitude=77.2090)
-        logging.info(f"Weather data received in dashboard: {weather_data}")
-        
-        if weather_data:
-            weather = [
-                weather_data['region'],
-                round(weather_data['temperature'], 1),
-                round(weather_data['rainfall'], 1)
-            ]
-            logging.info(f"Processed weather array: {weather}")
-        else:
-            weather = ['N/A', 'N/A', 'N/A']
-            logging.warning("Using default N/A values for weather")
-        
-        # Fetch latest weather data
-        weather_data_db = c.execute('''
-            SELECT Region, AverageTemperature, AverageRainfall 
-            FROM weather_data 
-            WHERE Year = 2024 AND Month = (
-                SELECT MAX(Month) FROM weather_data WHERE Year = 2024
-            )
-            LIMIT 1
-        ''').fetchone()
+        highlighted_crop = request.args.get('highlight')
         
         # Fetch market trends with historical data
         market_trends = c.execute('''
@@ -114,8 +91,12 @@ def dashboard():
                 c.CropName,
                 c.CropType,
                 c.IdealSoilType,
-                c.WaterRequirement,
-                GROUP_CONCAT(f.FertilizerName || ' (' || f.QuantityPerAcre || ' kg/acre)') as Fertilizers
+                c.IdealTemperature,
+                c.IdealHumidity,
+                c.IdealPH,
+                f.NitrogenReq || ' kg/acre N, ' || 
+                f.PhosphorusReq || ' kg/acre P, ' || 
+                f.PotassiumReq || ' kg/acre K' as Fertilizers
             FROM crop_information c
             LEFT JOIN fertilizer_requirements f ON c.CropID = f.CropID
             GROUP BY c.CropID
@@ -135,12 +116,11 @@ def dashboard():
         ''').fetchall()
         
         return render_template('dashboard.html', 
-                             weather=weather,
-                             weather_data_db=weather_data_db,
                              market_trends=market_trends,
                              unique_crops=unique_crops,
                              crop_data=crop_data,
-                             subsidies=subsidies)
+                             subsidies=subsidies,
+                             highlighted_crop=highlighted_crop)
                              
     except Exception as e:
         logging.error(f"Error in dashboard route: {e}")
@@ -392,6 +372,54 @@ def update_weather():
             'success': False,
             'message': str(e)
         })
+
+@app.route('/get_crop_details/<crop_name>')
+@login_required
+def get_crop_details(crop_name):
+    conn = sqlite3.connect('farmer_app.db')
+    c = conn.cursor()
+    
+    try:
+        # Fetch crop details including NPK requirements and ideal conditions
+        crop_details = c.execute('''
+            SELECT 
+                c.IdealTemperature,
+                c.IdealHumidity,
+                c.IdealPH,
+                f.NitrogenReq,
+                f.PhosphorusReq,
+                f.PotassiumReq
+            FROM crop_information c
+            LEFT JOIN fertilizer_requirements f ON c.CropID = f.CropID
+            WHERE LOWER(c.CropName) = LOWER(?)
+        ''', (crop_name,)).fetchone()
+        
+        if crop_details:
+            return jsonify({
+                'temperature': float(crop_details[0].replace('°C', '')),
+                'humidity': float(crop_details[1].replace('%', '')),
+                'ph': crop_details[2],
+                'nitrogen': crop_details[3],
+                'phosphorus': crop_details[4],
+                'potassium': crop_details[5]
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'Crop details not found'
+            })
+            
+    except Exception as e:
+        logging.error(f"Error fetching crop details: {e}")
+        return jsonify({
+            'success': False,
+            'message': str(e)
+        })
+    finally:
+        conn.close()
+
+# Load crop data
+df = pd.read_csv('data/Best_Values.csv')  # Updated path
 
 if __name__ == '__main__':
     app.run(debug=True, port=8080)  # Changed to port 8080 

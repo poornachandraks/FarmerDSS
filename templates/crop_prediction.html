@@ -120,6 +120,46 @@
                     <div id="prediction" class="text-2xl font-bold text-green-600"></div>
                 </div>
                 
+                <!-- Comparison Section -->
+                <div class="mb-6">
+                    <h4 class="text-lg text-gray-600 mb-3">Parameter Comparison</h4>
+                    <div class="grid grid-cols-3 gap-4 text-sm">
+                        <div class="bg-gray-50 p-3 rounded">
+                            <div class="font-medium">NPK Values</div>
+                            <div class="mt-1 space-y-1">
+                                <div>Given N: <span id="given-n" class="font-semibold"></span></div>
+                                <div>Ideal N: <span id="ideal-n" class="font-semibold"></span></div>
+                            </div>
+                            <div class="mt-1 space-y-1">
+                                <div>Given P: <span id="given-p" class="font-semibold"></span></div>
+                                <div>Ideal P: <span id="ideal-p" class="font-semibold"></span></div>
+                            </div>
+                            <div class="mt-1 space-y-1">
+                                <div>Given K: <span id="given-k" class="font-semibold"></span></div>
+                                <div>Ideal K: <span id="ideal-k" class="font-semibold"></span></div>
+                            </div>
+                        </div>
+                        <div class="bg-gray-50 p-3 rounded">
+                            <div class="font-medium">pH Level</div>
+                            <div class="mt-1 space-y-1">
+                                <div>Given pH: <span id="given-ph" class="font-semibold"></span></div>
+                                <div>Ideal pH: <span id="ideal-ph" class="font-semibold"></span></div>
+                            </div>
+                        </div>
+                        <div class="bg-gray-50 p-3 rounded">
+                            <div class="font-medium">Climate</div>
+                            <div class="mt-1 space-y-1">
+                                <div>Current Temp: <span id="given-temp" class="font-semibold"></span>°C</div>
+                                <div>Ideal Temp: <span id="ideal-temp" class="font-semibold"></span>°C</div>
+                            </div>
+                            <div class="mt-1 space-y-1">
+                                <div>Current Humidity: <span id="given-humidity" class="font-semibold"></span>%</div>
+                                <div>Ideal Humidity: <span id="ideal-humidity" class="font-semibold"></span>%</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
                 <!-- Top 3 predictions -->
                 <div id="top_predictions" class="space-y-4">
                     <div class="text-lg text-gray-600 mb-2">Alternative Options:</div>
@@ -137,6 +177,14 @@
                             <div id="prob3" class="text-sm text-gray-600"></div>
                         </div>
                     </div>
+                </div>
+
+                <!-- Add redirect button -->
+                <div class="mt-6">
+                    <button onclick="redirectToDashboard()" 
+                            class="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors">
+                        View Crop Details in Dashboard
+                    </button>
                 </div>
             </div>
         </div>
@@ -205,6 +253,26 @@
                 // Update main prediction
                 document.getElementById('prediction').textContent = data.prediction;
                 
+                // Update comparison values
+                document.getElementById('given-n').textContent = formData.get('nitrogen');
+                document.getElementById('given-p').textContent = formData.get('phosphorus');
+                document.getElementById('given-k').textContent = formData.get('potassium');
+                document.getElementById('given-ph').textContent = formData.get('ph');
+                document.getElementById('given-temp').textContent = data.weather.temperature.toFixed(1);
+                document.getElementById('given-humidity').textContent = data.weather.humidity.toFixed(1);
+                
+                // Fetch and update ideal values
+                fetch(`/get_crop_details/${encodeURIComponent(data.prediction)}`)
+                    .then(response => response.json())
+                    .then(cropDetails => {
+                        document.getElementById('ideal-n').textContent = cropDetails.nitrogen;
+                        document.getElementById('ideal-p').textContent = cropDetails.phosphorus;
+                        document.getElementById('ideal-k').textContent = cropDetails.potassium;
+                        document.getElementById('ideal-ph').textContent = cropDetails.ph;
+                        document.getElementById('ideal-temp').textContent = cropDetails.temperature;
+                        document.getElementById('ideal-humidity').textContent = cropDetails.humidity;
+                    });
+                
                 // Update top 3 predictions if available
                 if (data.top_predictions) {
                     document.getElementById('top_predictions').classList.remove('hidden');
@@ -231,5 +299,11 @@
             alert('An error occurred while making the prediction. Please try again.');
         });
     };
+
+    // Add this function to your existing JavaScript
+    function redirectToDashboard() {
+        const predictedCrop = document.getElementById('prediction').textContent;
+        window.location.href = `/dashboard?highlight=${encodeURIComponent(predictedCrop)}`;
+    }
 </script>
 {% endblock %} 

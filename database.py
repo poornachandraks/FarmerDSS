@@ -1,6 +1,8 @@
 import sqlite3
 from werkzeug.security import generate_password_hash
 import random
+import pandas as pd
+import math
 
 def init_db():
     conn = sqlite3.connect('farmer_app.db')
@@ -26,9 +28,9 @@ def init_db():
             CropName TEXT NOT NULL,
             CropType TEXT,
             IdealSoilType TEXT,
-            Rainfall FLOAT,
-            Temperature FLOAT,
-            WaterRequirement FLOAT
+            IdealTemperature REAL,
+            IdealHumidity REAL,
+            IdealPH REAL
         )
     ''')
     
@@ -37,9 +39,9 @@ def init_db():
         CREATE TABLE IF NOT EXISTS fertilizer_requirements (
             FertilizerID INTEGER PRIMARY KEY AUTOINCREMENT,
             CropID INTEGER,
-            FertilizerName TEXT NOT NULL,
-            QuantityPerAcre FLOAT,
-            ApplicationStage TEXT,
+            NitrogenReq REAL,
+            PhosphorusReq REAL,
+            PotassiumReq REAL,
             FOREIGN KEY (CropID) REFERENCES crop_information (CropID)
         )
     ''')
@@ -96,45 +98,58 @@ def init_db():
         pass  # Admin user already exists
     
     # Insert sample crop data
-    sample_crops = [
-        ('Rice', 'Cereal', 'Clayey', 1200, 25, 1500),
-        ('Wheat', 'Cereal', 'Loamy', 650, 20, 450),
-        ('Cotton', 'Fiber', 'Black soil', 700, 27, 550),
-        ('Maize', 'Cereal', 'Sandy Loam', 800, 24, 600),
-        ('Sugarcane', 'Cash Crop', 'Alluvial', 1500, 27, 2000),
-        ('Potato', 'Vegetable', 'Sandy Loam', 500, 20, 400),
-        ('Tomato', 'Vegetable', 'Loamy', 400, 25, 350),
-        ('Soybean', 'Pulse', 'Black soil', 600, 26, 450),
-        ('Groundnut', 'Oilseed', 'Sandy Loam', 500, 28, 400),
-        ('Mustard', 'Oilseed', 'Loamy', 350, 20, 300)
-    ]
-    
-    for crop in sample_crops:
+    df = pd.read_csv('data/Best_Values.csv')
+
+    for _, row in df.iterrows():
         try:
             c.execute('''
                 INSERT INTO crop_information 
-                (CropName, CropType, IdealSoilType, Rainfall, Temperature, WaterRequirement)
+                (CropName, CropType, IdealSoilType, IdealTemperature, IdealHumidity, IdealPH)
                 VALUES (?, ?, ?, ?, ?, ?)
-            ''', crop)
+            ''', (
+                row['Crop'],
+                row['CropType'],
+                row['IdealSoilType'],
+                f"{row['Temperature']}°C",
+                f"{row['Humidity']}%",
+                row['pH_Value']
+            ))
+            
+            # Get the CropID of the just inserted crop
+            crop_id = c.lastrowid
+            
+            # Insert fertilizer requirements
+            c.execute('''
+                INSERT INTO fertilizer_requirements 
+                (CropID, NitrogenReq, PhosphorusReq, PotassiumReq)
+                VALUES (?, ?, ?, ?)
+            ''', (
+                crop_id,
+                row['Nitrogen'],
+                row['Phosphorus'],
+                row['Potassium']
+            ))
         except sqlite3.IntegrityError:
             pass  # Crop already exists
     
-    # Insert random market trends data for each crop
-    regions = ['North', 'South']
-    for crop_id in range(1, 11):  # Assuming 10 crops
-        for region in regions:
-            for i in range(30):  # 30 data points
-                month = (i % 12) + 1
-                year = 2022 + (i // 12)
-                price = random.uniform(2000, 8000)  # Random price between 2000 and 8000
-                try:
-                    c.execute('''
-                        INSERT INTO market_trends 
-                        (CropID, Region, Month, Year, AveragePrice)
-                        VALUES (?, ?, ?, ?, ?)
-                    ''', (crop_id, region, month, year, price))
-                except sqlite3.IntegrityError:
-                    pass
+    # Insert market trends data from CSV
+    market_trends_df = pd.read_csv('data/market_trends.csv')
+    
+    for _, row in market_trends_df.iterrows():
+        try:
+            c.execute('''
+                INSERT INTO market_trends 
+                (CropID, Region, Month, Year, AveragePrice)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (
+                row['CropID'],
+                row['Region'],
+                row['Month'],
+                row['Year'],
+                row['AveragePrice']
+            ))
+        except sqlite3.IntegrityError:
+            pass  # Skip if entry already exists
     
     # Insert sample weather data
     sample_weather = [

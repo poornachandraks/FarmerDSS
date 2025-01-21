@@ -2,9 +2,67 @@
 
 {% block content %}
 <!-- Dashboard Grid -->
-<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+<div class="grid grid-cols-1 gap-6">
+    <!-- Highlighted Crop Details (shown only when a crop is highlighted) -->
+    {% if highlighted_crop %}
+    {% for crop in crop_data %}
+    {% if crop[0]|lower == highlighted_crop|lower %}
+    <div class="bg-white overflow-hidden shadow rounded-lg">
+        <div class="p-5">
+            <h2 class="text-xl font-semibold text-gray-900 mb-4">{{ crop[0] }} - Detailed Information</h2>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Growing Parameters Table -->
+                <div class="bg-gray-50 rounded-lg p-4">
+                    <table class="min-w-full">
+                        <tbody class="divide-y divide-gray-200">
+                            <tr>
+                                <td class="py-2 text-sm font-medium text-gray-500">Crop Type</td>
+                                <td class="py-2 text-sm text-gray-900">{{ crop[1] }}</td>
+                            </tr>
+                            <tr>
+                                <td class="py-2 text-sm font-medium text-gray-500">Ideal Soil Type</td>
+                                <td class="py-2 text-sm text-gray-900">{{ crop[2] }}</td>
+                            </tr>
+                            <tr>
+                                <td class="py-2 text-sm font-medium text-gray-500">Temperature</td>
+                                <td class="py-2 text-sm text-gray-900">{{ crop[3] }}</td>
+                            </tr>
+                            <tr>
+                                <td class="py-2 text-sm font-medium text-gray-500">Humidity</td>
+                                <td class="py-2 text-sm text-gray-900">{{ crop[4] }}</td>
+                            </tr>
+                            <tr>
+                                <td class="py-2 text-sm font-medium text-gray-500">pH Level</td>
+                                <td class="py-2 text-sm text-gray-900">{{ crop[5] }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <!-- Fertilizer Requirements -->
+                <div class="bg-gray-50 rounded-lg p-4">
+                    <h3 class="text-lg font-medium text-gray-900 mb-3">Fertilizer Requirements</h3>
+                    <div class="prose prose-sm">
+                        {% set npk_values = crop[6].split(',') %}
+                        <table class="min-w-full">
+                            <tbody class="divide-y divide-gray-200">
+                                {% for npk in npk_values %}
+                                <tr>
+                                    <td class="py-2 text-sm text-gray-900">{{ npk.strip() }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    {% endfor %}
+    {% endif %}
+
     <!-- Market Trends Card -->
-    <div class="lg:col-span-2 bg-white overflow-hidden shadow rounded-lg">
+    <div class="bg-white overflow-hidden shadow rounded-lg">
         <div class="p-5">
             <div class="flex justify-between items-center mb-4">
                 <h2 class="text-lg font-medium text-gray-900">Market Trends</h2>
@@ -22,67 +80,30 @@
         </div>
     </div>
 
-    <!-- Weather Data Card -->
-    <div class="bg-white overflow-hidden shadow rounded-lg">
-        <div class="p-5">
-            <h2 class="text-lg font-medium text-gray-900">Current Weather</h2>
-            <div class="mt-4 space-y-3">
-                <div class="mb-4">
-                    <button id="updateWeather" 
-                            class="bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600 transition-colors"
-                            onclick="updateWeatherData()">
-                        Update Weather
-                    </button>
-                </div>
-                <script>
-                    console.log('Weather data:', JSON.parse('{{ weather|tojson|safe }}'));
-                </script>
-                {% if weather and weather[0] != 'N/A' %}
-                    <div class="flex justify-between items-center">
-                        <span class="text-gray-600">Region</span>
-                        <span class="text-gray-900 font-medium" data-weather-region>{{ weather[0] }}</span>
-                    </div>
-                    <div class="flex justify-between items-center">
-                        <span class="text-gray-600">Temperature</span>
-                        <span class="text-gray-900 font-medium" data-weather-temp>{{ weather[1] }}°C</span>
-                    </div>
-                    <div class="flex justify-between items-center">
-                        <span class="text-gray-600">Rainfall</span>
-                        <span class="text-gray-900 font-medium" data-weather-rain>{{ weather[2] }}mm</span>
-                    </div>
-                {% else %}
-                    <div class="text-center text-gray-500">
-                        <p>Weather data unavailable</p>
-                        <script>
-                            console.log('Weather data unavailable condition met');
-                        </script>
-                    </div>
-                {% endif %}
-            </div>
-        </div>
-    </div>
-
     <!-- Crop Information Card -->
-    <div class="lg:col-span-2 bg-white overflow-hidden shadow rounded-lg">
+    <div class="bg-white overflow-hidden shadow rounded-lg">
         <div class="p-5">
             <h2 class="text-lg font-medium text-gray-900 mb-4">Crop Information</h2>
             <div class="overflow-x-auto">
-                <table class="min-w-full divide-y divide-gray-200" role="table">
+                <!-- Basic Info Table -->
+                <table class="min-w-full divide-y divide-gray-200 mb-6" role="table">
                     <thead class="bg-gray-50">
                         <tr>
                             <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Crop</th>
                             <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
                             <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Soil Type</th>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fertilizers</th>
                         </tr>
                     </thead>
                     <tbody class="bg-white divide-y divide-gray-200">
                         {% for crop in crop_data %}
-                        <tr>
+                        <tr {% if crop[0]|lower == highlighted_crop|lower %}
+                            class="bg-green-50 transition-colors duration-500 hover:bg-green-100"
+                            {% else %}
+                            class="hover:bg-gray-50 transition-colors duration-300"
+                            {% endif %}>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ crop[0] }}</td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ crop[1] }}</td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ crop[2] }}</td>
-                            <td class="px-6 py-4 text-sm text-gray-500">{{ crop[4] }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -212,31 +233,45 @@
         marketChart.update();
     });
 
-    // Add weather update functionality
-    function updateWeatherData() {
-        // Get coordinates from the map (assuming they're stored in data attributes or variables)
-        const lat = document.getElementById('latitude').value || 28.6139;
-        const lon = document.getElementById('longitude').value || 77.2090;
-
-        fetch(`/update_weather?lat=${lat}&lon=${lon}`)
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    // Update the weather display
-                    document.querySelector('[data-weather-region]').textContent = data.weather[0];
-                    document.querySelector('[data-weather-temp]').textContent = `${data.weather[1]}°C`;
-                    document.querySelector('[data-weather-rain]').textContent = `${data.weather[2]}mm`;
-                    
-                    // Remove the 'unavailable' message if it exists
-                    const unavailableMsg = document.querySelector('.text-gray-500 p');
-                    if (unavailableMsg) {
-                        unavailableMsg.parentElement.style.display = 'none';
-                    }
-                } else {
-                    console.error('Failed to update weather data');
+    document.addEventListener('DOMContentLoaded', function() {
+        const highlightedCrop = '{{ highlighted_crop }}';
+        if (highlightedCrop) {
+            // Normalize the case for comparison
+            const normalizedHighlightedCrop = highlightedCrop.toLowerCase();
+            
+            // Auto-select the crop in the dropdown
+            const cropSelector = document.getElementById('cropSelector');
+            if (cropSelector) {
+                // Find the matching option (case-insensitive)
+                const options = Array.from(cropSelector.options);
+                const matchingOption = options.find(option => 
+                    option.value.toLowerCase() === normalizedHighlightedCrop
+                );
+                
+                if (matchingOption) {
+                    cropSelector.value = matchingOption.value;
+                    // Trigger the change event to update the chart
+                    cropSelector.dispatchEvent(new Event('change'));
                 }
-            })
-            .catch(error => console.error('Error:', error));
-    }
+            }
+            
+            // Find and scroll to the highlighted row
+            const rows = document.querySelectorAll('tbody tr');
+            rows.forEach(row => {
+                const cropName = row.querySelector('td').textContent.trim();
+                if (cropName.toLowerCase() === normalizedHighlightedCrop) {
+                    // Add highlighting classes
+                    row.classList.add('bg-green-50', 'transition-colors', 'duration-500');
+                    // Scroll into view with a slight delay to ensure DOM is ready
+                    setTimeout(() => {
+                        row.scrollIntoView({ 
+                            behavior: 'smooth', 
+                            block: 'center' 
+                        });
+                    }, 100);
+                }
+            });
+        }
+    });
 </script>
 {% endblock %} 
