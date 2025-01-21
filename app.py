@@ -1,7 +1,16 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, session
+from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
 from werkzeug.security import check_password_hash, generate_password_hash
 import sqlite3
 from functools import wraps
+from folium import Map, ClickForLatLng
+import requests
+from utils.weather import get_weather_data
+import logging
+import pickle
+import numpy as np
+import os
+from joblib import load
+import pandas as pd
 
 app = Flask(__name__)
 app.secret_key = 'your_secret_key_here'  # Change this to a secure secret key
@@ -51,8 +60,23 @@ def dashboard():
     c = conn.cursor()
     
     try:
+        # Get weather data for a default location
+        weather_data = get_weather_data(latitude=28.6139, longitude=77.2090)
+        logging.info(f"Weather data received in dashboard: {weather_data}")
+        
+        if weather_data:
+            weather = [
+                weather_data['region'],
+                round(weather_data['temperature'], 1),
+                round(weather_data['rainfall'], 1)
+            ]
+            logging.info(f"Processed weather array: {weather}")
+        else:
+            weather = ['N/A', 'N/A', 'N/A']
+            logging.warning("Using default N/A values for weather")
+        
         # Fetch latest weather data
-        weather_data = c.execute('''
+        weather_data_db = c.execute('''
             SELECT Region, AverageTemperature, AverageRainfall 
             FROM weather_data 
             WHERE Year = 2024 AND Month = (
@@ -110,26 +134,264 @@ def dashboard():
             ORDER BY s.Amount DESC
         ''').fetchall()
         
-    except sqlite3.Error as e:
-        print(f"Database error: {e}")
+        return render_template('dashboard.html', 
+                             weather=weather,
+                             weather_data_db=weather_data_db,
+                             market_trends=market_trends,
+                             unique_crops=unique_crops,
+                             crop_data=crop_data,
+                             subsidies=subsidies)
+                             
+    except Exception as e:
+        logging.error(f"Error in dashboard route: {e}")
         flash("An error occurred while fetching data")
         return redirect(url_for('login'))
         
     finally:
         conn.close()
-    
-    return render_template('dashboard.html', 
-                         weather=weather_data,
-                         market_trends=market_trends,
-                         unique_crops=unique_crops,
-                         crop_data=crop_data,
-                         subsidies=subsidies)
 
 @app.route('/logout')
 def logout():
     session.clear()
     flash('You have been logged out')
     return redirect(url_for('login'))
+
+# Load the model using joblib
+try:
+    model_path = 'model/crop_pred.pkl'  # Updated path to match your file
+    logging.info(f"Attempting to load model from: {model_path}")
+    
+    # Check if file exists
+    if not os.path.exists(model_path):
+        logging.error(f"Model file not found at: {model_path}")
+        model = None
+    else:
+        model = load(model_path)  # Use joblib to load
+        logging.info(f"Loaded model type: {type(model)}")
+        
+        # Verify model has predict method
+        if not hasattr(model, 'predict'):
+            logging.error("Loaded object does not have predict method")
+            model = None
+            
+except Exception as e:
+    logging.error(f"Error loading model: {e}")
+    model = None
+
+@app.route('/crop_prediction', methods=['GET'])
+@login_required
+def crop_prediction():
+    return render_template('crop_prediction.html')
+
+# Add this at the top of your file with other imports and constants
+CROP_MAPPING = {
+    0: "rice",
+    1: "maize",
+    2: "chickpea",
+    3: "kidneybeans",
+    4: "pigeonpeas",
+    5: "mothbeans",
+    6: "mungbean",
+    7: "blackgram",
+    8: "lentil",
+    9: "pomegranate",
+    10: "banana",
+    11: "mango",
+    12: "grapes",
+    13: "watermelon",
+    14: "muskmelon",
+    15: "apple",
+    16: "orange",
+    17: "papaya",
+    18: "coconut",
+    19: "cotton",
+    20: "jute",
+    21: "coffee"
+}
+
+# Update the feature names to match exactly what the model expects
+FEATURE_NAMES = [
+    'Nitrogen', 'Phosphorus', 'Potassium', 
+    'Temperature', 'Humidity', 'pH_Value'  # Changed 'ph' to 'pH_Value'
+]
+
+@app.route('/crop_prediction/predict', methods=['POST'])
+@login_required
+def predict():
+    if model is None:
+        return jsonify({
+            'success': False,
+            'message': 'Model not properly loaded'
+        })
+        
+    try:
+        # Get and validate form data
+        try:
+            nitrogen = float(request.form['nitrogen'])
+            phosphorus = float(request.form['phosphorus'])
+            potassium = float(request.form['potassium'])
+            ph = float(request.form['ph'])
+            latitude = float(request.form['latitude'])
+            longitude = float(request.form['longitude'])
+            
+            # Log raw input values
+            logging.info(f"""
+            Raw Input Values:
+            - Nitrogen: {nitrogen}
+            - Phosphorus: {phosphorus}
+            - Potassium: {potassium}
+            - pH: {ph}
+            - Location: ({latitude}, {longitude})
+            """)
+            
+            # Input validation with detailed ranges
+            if not (0 <= nitrogen <= 140):
+                raise ValueError(f"Nitrogen should be between 0 and 140, got {nitrogen}")
+            if not (0 <= phosphorus <= 145):
+                raise ValueError(f"Phosphorus should be between 0 and 145, got {phosphorus}")
+            if not (0 <= potassium <= 205):
+                raise ValueError(f"Potassium should be between 0 and 205, got {potassium}")
+            if not (0 <= ph <= 14):
+                raise ValueError(f"pH should be between 0 and 14, got {ph}")
+                
+        except ValueError as e:
+            return jsonify({
+                'success': False,
+                'message': str(e)
+            })
+        
+        # Get weather data
+        weather_data = get_weather_data(latitude=latitude, longitude=longitude)
+        
+        if not weather_data:
+            return jsonify({
+                'success': False,
+                'message': 'Failed to fetch weather data'
+            })
+        
+        # Log weather data
+        logging.info(f"""
+        Weather Data:
+        - Temperature: {weather_data['temperature']}
+        - Humidity: {weather_data['humidity']}
+        - Rainfall: {weather_data['rainfall']}
+        """)
+        
+        # Prepare input features with correct column names
+        features = pd.DataFrame([[
+            nitrogen, phosphorus, potassium,
+            weather_data['temperature'],
+            weather_data['humidity'],
+            ph  # The value is still called 'ph' in our code, but the column name is 'pH_Value'
+        ]], columns=FEATURE_NAMES)
+        
+        # Log the features
+        logging.info(f"Features shape: {features.shape}")
+        logging.info(f"Features with names:\n{features}")
+        
+        # Make prediction
+        try:
+            prediction_result = model.predict(features)[0]
+            logging.info(f"Raw prediction result: {prediction_result}")
+            
+            # Get prediction probabilities
+            if hasattr(model, 'predict_proba'):
+                probabilities = model.predict_proba(features)[0]
+                
+                # Only include predictions with probability > 1%
+                significant_predictions = []
+                sorted_idx = np.argsort(probabilities)[::-1]
+                
+                for idx in sorted_idx:
+                    prob = probabilities[idx]
+                    if prob > 0.01:  # More than 1% probability
+                        crop = CROP_MAPPING.get(idx, 'unknown')
+                        significant_predictions.append({
+                            'crop': crop.title(),
+                            'probability': float(prob)
+                        })
+                        logging.info(f"Significant crop: {crop}, Probability: {prob:.3f}")
+                
+                # Take top 3 from significant predictions
+                top_3_crops = significant_predictions[:3]
+                
+            # Use the highest probability prediction
+            prediction = top_3_crops[0]['crop'] if top_3_crops else CROP_MAPPING.get(prediction_result, 'unknown').title()
+            
+        except Exception as e:
+            logging.error(f"Error making prediction: {e}")
+            return jsonify({
+                'success': False,
+                'message': f'Error making prediction: {str(e)}'
+            })
+        
+        # Convert weather data to standard Python types
+        weather_response = {
+            'region': str(weather_data['region']),
+            'temperature': float(weather_data['temperature']),
+            'humidity': float(weather_data['humidity']),
+            'rainfall': float(weather_data['rainfall'])
+        }
+        
+        # Prepare response
+        response_data = {
+            'success': True,
+            'prediction': prediction,
+            'weather': weather_response
+        }
+        
+        # Add probabilities to response if available
+        if 'top_3_crops' in locals():
+            response_data['top_predictions'] = top_3_crops
+        
+        # Log the response for debugging
+        logging.info(f"Sending response: {response_data}")
+        
+        return jsonify(response_data)
+        
+    except Exception as e:
+        logging.error(f"Error in prediction route: {e}")
+        return jsonify({
+            'success': False,
+            'message': str(e)
+        })
+
+@app.route('/update_weather')
+@login_required
+def update_weather():
+    try:
+        lat = float(request.args.get('lat', 28.6139))
+        lon = float(request.args.get('lon', 77.2090))
+        
+        weather_data = get_weather_data(latitude=lat, longitude=lon)
+        
+        if weather_data:
+            weather = [
+                weather_data['region'],
+                round(weather_data['temperature'], 1),
+                round(weather_data['humidity'], 1),
+                round(weather_data['rainfall'], 1)
+            ]
+            return jsonify({
+                'success': True,
+                'weather': weather,
+                'coordinates': {
+                    'lat': lat,
+                    'lon': lon
+                }
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'Failed to fetch weather data'
+            })
+            
+    except Exception as e:
+        logging.error(f"Error updating weather: {e}")
+        return jsonify({
+            'success': False,
+            'message': str(e)
+        })
 
 if __name__ == '__main__':
     app.run(debug=True, port=8080)  # Changed to port 8080 

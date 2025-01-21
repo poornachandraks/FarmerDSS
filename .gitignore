@@ -1,0 +1,22 @@
+# ... existing entries ...
+config.py 
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+
+# Virtual environment
+Farmenv/
+env/
+*.env
+
+# Log files
+*.log
+
+# IDE files
+.idea/
+.vscode/
+
+# OS generated files
+.DS_Store
+Thumbs.db 
