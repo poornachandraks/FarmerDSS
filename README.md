@@ -57,6 +57,7 @@ The Farmer Decision Support System (FDSS) is a web application designed to assis
    METEOMATICS_PASSWORD = "your_password"
    METEOMATICS_BASE_URL = "https://api.meteomatics.com"
    ```
+   - Head over to https://www.meteomatics.com/en/weather-api/weather-api-free/ to sign up for a Meteomatics account.
 
 4. **Set up the database**:
    - Run the `database.py` script to create the database and populate it with initial data:
