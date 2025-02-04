@@ -21,6 +21,25 @@ def init_db():
         )
     ''')
     
+    # Create Prediction History table
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS prediction_history (
+            PredictionID INTEGER PRIMARY KEY AUTOINCREMENT,
+            UserID INTEGER NOT NULL,
+            Timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            Nitrogen REAL,
+            Phosphorus REAL,
+            Potassium REAL,
+            Temperature REAL,
+            Humidity REAL,
+            pH REAL,
+            Location TEXT,
+            PredictedCrop TEXT,
+            Probability REAL,
+            FOREIGN KEY (UserID) REFERENCES user_information (UserID)
+        )
+    ''')
+    
     # Create Crop Information table
     c.execute('''
         CREATE TABLE IF NOT EXISTS crop_information (

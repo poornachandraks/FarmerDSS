@@ -1,113 +1,118 @@
-# Farmer Decision Support System
+# Farmer's Decision Support System
 
-## Overview
-
-The Farmer Decision Support System (FDSS) is a web application designed to assist farmers in making informed decisions regarding crop selection, market trends, and weather conditions. The application utilizes machine learning models to predict suitable crops based on soil parameters and provides insights into market trends.
-
-## Project Structure
-
-```
-/your_project
-│
-├── /data
-│   ├── Best_Values.csv
-│   └── market_trends.csv
-│
-├── app.py
-├── config.py
-├── database.py
-├── generate_market_data.py
-├── requirements.txt
-├── README.md
-├── .gitignore
-├── utils/
-│   └── weather.py
-├── verify_model.py
-├── train_model.py
-└── templates/
-    ├── base.html
-    ├── crop_prediction.html
-    └── dashboard.html
-```
-
-## Setup Instructions
-
-### Prerequisites
-
-- Python 3.x
-- pip (Python package installer)
-
-### Installation
-
-1. **Clone the repository**:
-   ```bash
-   git clone <repository-url>
-   cd <repository-directory>
-   ```
-
-2. **Install required packages**:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. **Create a configuration file**:
-   - Create a `config.py` file in the root directory with your API credentials and other settings:
-   ```python
-   METEOMATICS_USERNAME = "your_username"
-   METEOMATICS_PASSWORD = "your_password"
-   METEOMATICS_BASE_URL = "https://api.meteomatics.com"
-   ```
-   - Head over to https://www.meteomatics.com/en/weather-api/weather-api-free/ to sign up for a Meteomatics account.
-
-4. **Set up the database**:
-   - Run the `database.py` script to create the database and populate it with initial data:
-   ```bash
-   python database.py
-   ```
-
-5. **Generate market trends data** (optional):
-   - If you want to generate or refresh the market trends data, run the `generate_market_data.py` script:
-   ```bash
-   python generate_market_data.py
-   ```
-
-6. **Run the application**:
-   - Start the Flask web server by running the `app.py` script:
-   ```bash
-   python app.py
-   ```
-
-7. **Access the application**:
-   - Open your web browser and navigate to `http://127.0.0.1:8080` to access the application.
+A web-based application that helps farmers make informed decisions about crop selection based on soil parameters and local weather conditions.
 
 ## Features
 
-- **Crop Prediction**: Input soil parameters to receive crop recommendations.
-- **Market Trends**: View historical market trends for various crops.
-- **Weather Data**: Fetch and display current weather conditions based on location.
-- **User Management**: Admin functionality for managing user accounts and crop data.
+- Soil parameter analysis (N, P, K, pH levels)
+- Real-time weather data integration
+- Interactive map for location selection
+- ML-based crop recommendations
+- Detailed crop information dashboard
+- Historical prediction tracking
 
-## File Descriptions
+## Tech Stack
 
-- **`data/`**: Contains CSV files for crop data and market trends.
-- **`app.py`**: Main application file that runs the Flask server.
-- **`config.py`**: Configuration settings for the application, including API credentials for weather data.
-- **`database.py`**: Initializes the SQLite database and populates it with data.
-- **`generate_market_data.py`**: Generates market trends data and saves it to a CSV file.
-- **`requirements.txt`**: Lists the required Python packages for the project.
-- **`.gitignore`**: Specifies files and directories that should be ignored by Git.
-- **`utils/weather.py`**: Utility functions for fetching weather data.
-- **`verify_model.py`**: Script for verifying machine learning models.
-- **`train_model.py`**: Script for training machine learning models.
-- **`templates/`**: Contains HTML templates for the web application, including:
-  - **`base.html`**: Base template for the application layout.
-  - **`crop_prediction.html`**: Template for the crop prediction page.
-  - **`dashboard.html`**: Template for the dashboard displaying market trends and crop information.
+- **Frontend**: HTML, CSS (Tailwind), JavaScript
+- **Backend**: Flask (Python)
+- **Database**: SQLite/PostgreSQL
+- **APIs**: OpenWeatherMap, OpenStreetMap
+- **ML**: scikit-learn
+
+## Installation
+
+1. Clone the repository:
+```bash
+git clone https://github.com/yourusername/FarmerDSS.git
+cd FarmerDSS
+```
+
+2. Create and activate virtual environment:
+```bash
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+```
+
+3. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+4. Create .env file:
+```bash
+touch .env
+```
+Add the following environment variables:
+```
+WEATHER_API_KEY=your_api_key
+DATABASE_URL=your_database_url
+FLASK_SECRET_KEY=your_secret_key
+```
+
+5. Initialize the database:
+```bash
+flask db init
+flask db migrate
+flask db upgrade
+```
+
+## Usage
+
+1. Start the development server:
+```bash
+flask run
+```
+
+2. Open your browser and navigate to:
+```
+http://localhost:5000
+```
+
+## API Documentation
+
+### Weather API
+- Endpoint: `/update_weather`
+- Method: GET
+- Parameters: 
+  - lat (float): Latitude
+  - lon (float): Longitude
+- Response: Weather data including temperature, humidity, and rainfall
+
+### Prediction API
+- Endpoint: `/crop_prediction/predict`
+- Method: POST
+- Parameters:
+  - nitrogen (float)
+  - phosphorus (float)
+  - potassium (float)
+  - ph (float)
+  - latitude (float)
+  - longitude (float)
+- Response: Top crop recommendations with confidence scores
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a pull request or open an issue for any suggestions or improvements.
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+## Security
+
+- API keys and sensitive data are stored in environment variables
+- Input validation implemented for all form submissions
+- SQL injection prevention through parameterized queries
+- XSS protection implemented
+- CSRF protection enabled
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details
+
+## Acknowledgments
+
+- OpenWeatherMap API for weather data
+- OpenStreetMap for map services
+- Tailwind CSS for styling
+- Flask community for the excellent framework

@@ -8,27 +8,286 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css"/>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     {% block extra_head %}{% endblock %}
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            scroll-behavior: smooth;
+        }
+
+        .animate-fade-in {
+            animation: fadeIn 0.5s ease-in;
+        }
+        
+        .animate-slide-up {
+            animation: slideUp 0.5s ease-out;
+        }
+        
+        .animate-scale {
+            animation: scale 0.3s ease-in-out;
+        }
+        
+        @keyframes slideUp {
+            from {
+                transform: translateY(20px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+        
+        @keyframes scale {
+            from {
+                transform: scale(0.95);
+            }
+            to {
+                transform: scale(1);
+            }
+        }
+        
+        .nav-link {
+            position: relative;
+            color: #4B5563;
+            text-decoration: none;
+            padding-bottom: 2px;
+        }
+        
+        .nav-link::after {
+            content: '';
+            position: absolute;
+            width: 0;
+            height: 2px;
+            bottom: 0;
+            left: 0;
+            background-color: #2563EB;
+            transition: width 0.3s ease;
+        }
+        
+        .nav-link:hover::after {
+            width: 100%;
+        }
+        
+        .card {
+            transition: all 0.3s ease;
+            border-radius: 1rem;
+            overflow: hidden;
+            background: linear-gradient(135deg, rgba(255,255,255,0.8), rgba(255,255,255,0.4));
+            backdrop-filter: blur(10px);
+        }
+        
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 24px rgba(0,0,0,0.1);
+        }
+
+        .glass-effect {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .gradient-text {
+            background: linear-gradient(135deg, #16a34a, #2563eb);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #16a34a, #2563eb);
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px rgba(37, 99, 235, 0.2);
+        }
+
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 3px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #16a34a;
+            border-radius: 3px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #15803d;
+        }
+
+        /* Animation Delays */
+        .delay-0 { animation-delay: 0s; }
+        .delay-1 { animation-delay: 0.1s; }
+        .delay-2 { animation-delay: 0.2s; }
+        .delay-3 { animation-delay: 0.3s; }
+        .delay-4 { animation-delay: 0.4s; }
+        .delay-5 { animation-delay: 0.5s; }
+        .delay-6 { animation-delay: 0.6s; }
+        .delay-7 { animation-delay: 0.7s; }
+        .delay-8 { animation-delay: 0.8s; }
+        .delay-9 { animation-delay: 0.9s; }
+    </style>
 </head>
-<body class="bg-gray-50">
-    <!-- Navigation -->
-    <nav class="bg-white shadow-sm" aria-label="Main navigation">
+<body class="bg-gradient-to-br from-gray-50 via-blue-50 to-green-50 min-h-screen custom-scrollbar">
+    <!-- Navigation Bar -->
+    <nav class="bg-gradient-to-r from-green-600 to-blue-600 shadow-lg">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex justify-between h-16">
-                <div class="flex items-center">
-                    <h1 class="text-xl font-bold text-gray-900">Farmer's Portal</h1>
+            <div class="flex items-center justify-between h-16">
+                <!-- Logo/Brand -->
+                <div class="flex-shrink-0">
+                    <a href="{{ url_for('dashboard') }}" class="text-white font-bold text-xl flex items-center space-x-2">
+                        <i class="fas fa-leaf text-2xl"></i>
+                        <span>Farmer's Portal</span>
+                    </a>
                 </div>
-                <div class="flex items-center space-x-4">
-                    {% if session.username %}
-                        <span class="text-gray-700">Welcome, {{ session.username }}</span>
+                
+                <!-- Navigation Links -->
+                {% if session.user_id %}
+                <div class="hidden md:block">
+                    <div class="ml-10 flex items-baseline space-x-6">
                         <a href="{{ url_for('dashboard') }}" 
-                           class="text-gray-700 hover:text-gray-900">Dashboard</a>
-                        <a href="{{ url_for('crop_prediction') }}" 
-                           class="text-gray-700 hover:text-gray-900">Crop Prediction</a>
-                        <a href="{{ url_for('logout') }}" 
-                           class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">
-                            Logout
+                           class="text-white hover:bg-white/10 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-300 flex items-center space-x-2">
+                           <i class="fas fa-chart-line w-5 text-center"></i>
+                           <span>Dashboard</span>
                         </a>
+                        
+                        <a href="{{ url_for('crop_prediction') }}" 
+                           class="text-white hover:bg-white/10 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-300 flex items-center space-x-2">
+                           <i class="fas fa-seedling w-5 text-center"></i>
+                           <span>Crop Prediction</span>
+                        </a>
+                        
+                        <a href="{{ url_for('prediction_history') }}" 
+                           class="text-white hover:bg-white/10 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-300 flex items-center space-x-2">
+                           <i class="fas fa-history w-5 text-center"></i>
+                           <span>History</span>
+                        </a>
+                        
+                        {% if session.role == 'admin' %}
+                        <a href="{{ url_for('manage_crops') }}" 
+                           class="text-white hover:bg-white/10 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-300 flex items-center space-x-2">
+                           <i class="fas fa-tasks w-5 text-center"></i>
+                           <span>Manage Crops</span>
+                        </a>
+                        
+                        <a href="{{ url_for('manage_subsidies') }}" 
+                           class="text-white hover:bg-white/10 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-300 flex items-center space-x-2">
+                           <i class="fas fa-hand-holding-usd w-5 text-center"></i>
+                           <span>Manage Subsidies</span>
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+                
+                <!-- User Menu -->
+                <div class="hidden md:block">
+                    <div class="ml-6 flex items-center">
+                        {% if session.user_id %}
+                        <div class="text-white mr-6 flex items-center bg-white/10 px-4 py-2 rounded-lg">
+                            <i class="fas fa-user-circle text-lg mr-2"></i>
+                            <span>{{ session.username }}
+                            {% if session.role == 'admin' %}
+                            <span class="text-xs bg-white/20 px-2 py-1 rounded-full ml-2">Admin</span>
+                            {% endif %}
+                            </span>
+                        </div>
+                        <button onclick="showLogoutModal()" 
+                           class="text-white hover:bg-white/10 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-300 flex items-center space-x-2">
+                           <i class="fas fa-sign-out-alt w-5 text-center"></i>
+                           <span>Logout</span>
+                        </button>
+                        {% else %}
+                        <a href="{{ url_for('login') }}" 
+                           class="text-white hover:bg-white/10 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-300 flex items-center space-x-2">
+                           <i class="fas fa-sign-in-alt w-5 text-center"></i>
+                           <span>Login</span>
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <!-- Mobile menu button -->
+                <div class="-mr-2 flex md:hidden">
+                    <button type="button" 
+                            onclick="toggleMobileMenu()"
+                            class="bg-white/10 inline-flex items-center justify-center p-2.5 rounded-lg text-white hover:bg-white/20 focus:outline-none transition-all duration-300">
+                        <span class="sr-only">Open main menu</span>
+                        <i class="fas fa-bars text-lg"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Mobile menu -->
+            <div class="md:hidden hidden animate-fade-in" id="mobileMenu">
+                <div class="px-2 pt-2 pb-3 space-y-1 sm:px-3">
+                    {% if session.user_id %}
+                    <a href="{{ url_for('dashboard') }}" 
+                       class="text-white hover:bg-white/10 flex items-center space-x-3 px-4 py-3 rounded-lg text-base font-medium transition-all duration-300">
+                       <i class="fas fa-chart-line w-5 text-center"></i>
+                       <span>Dashboard</span>
+                    </a>
+                    
+                    <a href="{{ url_for('crop_prediction') }}" 
+                       class="text-white hover:bg-white/10 flex items-center space-x-3 px-4 py-3 rounded-lg text-base font-medium transition-all duration-300">
+                       <i class="fas fa-seedling w-5 text-center"></i>
+                       <span>Crop Prediction</span>
+                    </a>
+                    
+                    <a href="{{ url_for('prediction_history') }}" 
+                       class="text-white hover:bg-white/10 flex items-center space-x-3 px-4 py-3 rounded-lg text-base font-medium transition-all duration-300">
+                       <i class="fas fa-history w-5 text-center"></i>
+                       <span>History</span>
+                    </a>
+                    
+                    {% if session.role == 'admin' %}
+                    <a href="{{ url_for('manage_crops') }}" 
+                       class="text-white hover:bg-white/10 flex items-center space-x-3 px-4 py-3 rounded-lg text-base font-medium transition-all duration-300">
+                       <i class="fas fa-tasks w-5 text-center"></i>
+                       <span>Manage Crops</span>
+                    </a>
+                    
+                    <a href="{{ url_for('manage_subsidies') }}" 
+                       class="text-white hover:bg-white/10 flex items-center space-x-3 px-4 py-3 rounded-lg text-base font-medium transition-all duration-300">
+                       <i class="fas fa-hand-holding-usd w-5 text-center"></i>
+                       <span>Manage Subsidies</span>
+                    </a>
+                    {% endif %}
+                    
+                    <div class="pt-4 pb-3 border-t border-white/10">
+                        <div class="flex items-center px-4 py-3">
+                            <div class="text-white flex items-center bg-white/10 px-4 py-2 rounded-lg w-full">
+                                <i class="fas fa-user-circle text-lg mr-2"></i>
+                                {{ session.username }}
+                                {% if session.role == 'admin' %}
+                                <span class="text-xs bg-white/20 px-2 py-1 rounded-full ml-2">Admin</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="mt-3 px-2">
+                            <button onclick="showLogoutModal()" 
+                               class="text-white hover:bg-white/10 flex items-center space-x-3 w-full text-left px-4 py-3 rounded-lg text-base font-medium transition-all duration-300">
+                               <i class="fas fa-sign-out-alt w-5 text-center"></i>
+                               <span>Logout</span>
+                            </button>
+                        </div>
+                    </div>
+                    {% else %}
+                    <a href="{{ url_for('login') }}" 
+                       class="text-white hover:bg-white/10 flex items-center space-x-3 px-4 py-3 rounded-lg text-base font-medium transition-all duration-300">
+                       <i class="fas fa-sign-in-alt w-5 text-center"></i>
+                       <span>Login</span>
+                    </a>
                     {% endif %}
                 </div>
             </div>
@@ -36,12 +295,15 @@
     </nav>
 
     <!-- Main Content -->
-    <main class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        {% with messages = get_flashed_messages() %}
+    <main class="max-w-7xl mx-auto py-20 sm:px-6 lg:px-8">
+        {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
-                {% for message in messages %}
-                    <div class="mb-4 p-4 rounded-lg bg-green-50 text-green-700" role="alert">
-                        {{ message }}
+                {% for category, message in messages %}
+                    <div class="animate-slide-up mb-4 p-4 rounded-lg glass-effect {% if category == 'error' %}bg-red-50/80 text-red-700{% else %}bg-green-50/80 text-green-700{% endif %} shadow-sm" role="alert">
+                        <div class="flex items-center">
+                            <i class="{% if category == 'error' %}fas fa-exclamation-circle animate-bounce{% else %}fas fa-check-circle animate-scale{% endif %} mr-2"></i>
+                            {{ message }}
+                        </div>
                     </div>
                 {% endfor %}
             {% endif %}
@@ -50,7 +312,101 @@
         {% block content %}{% endblock %}
     </main>
 
+    <!-- Footer -->
+    <footer class="bg-white/80 backdrop-blur-sm shadow-md mt-12">
+        <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+            <div class="flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
+                <div class="text-center md:text-left">
+                    <p class="text-gray-500">© 2024 Farmer's Portal. All rights reserved.</p>
+                    <p class="text-sm text-gray-400 mt-1">Empowering farmers with smart decisions</p>
+                </div>
+                <div class="flex space-x-6">
+                    <a href="#" class="text-gray-400 hover:text-gray-600 transform hover:scale-110 transition-all duration-300">
+                        <i class="fab fa-twitter text-xl"></i>
+                    </a>
+                    <a href="#" class="text-gray-400 hover:text-gray-600 transform hover:scale-110 transition-all duration-300">
+                        <i class="fab fa-facebook text-xl"></i>
+                    </a>
+                    <a href="#" class="text-gray-400 hover:text-gray-600 transform hover:scale-110 transition-all duration-300">
+                        <i class="fab fa-instagram text-xl"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Logout Modal -->
+    <div id="logoutModal" class="fixed inset-0 z-50 hidden">
+        <div class="absolute inset-0 bg-black/50 backdrop-blur-sm"></div>
+        <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
+            <div class="bg-white rounded-2xl shadow-2xl p-8 w-96 animate-scale">
+                <div class="text-center mb-6">
+                    <div class="mb-4">
+                        <i class="fas fa-sign-out-alt text-4xl text-red-600"></i>
+                    </div>
+                    <h3 class="text-xl font-semibold text-gray-900">Confirm Logout</h3>
+                    <p class="text-gray-600 mt-2">Are you sure you want to logout?</p>
+                </div>
+                <div class="flex justify-center space-x-4">
+                    <button onclick="closeLogoutModal()" 
+                            class="px-6 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 transition-all duration-300">
+                        Cancel
+                    </button>
+                    <a href="{{ url_for('logout') }}" 
+                       class="px-6 py-2 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-lg hover:from-red-700 hover:to-red-800 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition-all duration-300">
+                        Logout
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
     {% block extra_scripts %}{% endblock %}
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script>
+        // Add smooth scrolling
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                document.querySelector(this.getAttribute('href')).scrollIntoView({
+                    behavior: 'smooth'
+                });
+            });
+        });
+
+        // Add loading animation
+        window.addEventListener('load', function() {
+            document.body.classList.add('animate-fade-in');
+        });
+
+        function showLogoutModal() {
+            document.getElementById('logoutModal').classList.remove('hidden');
+        }
+
+        function closeLogoutModal() {
+            document.getElementById('logoutModal').classList.add('hidden');
+        }
+
+        // Close modal when clicking outside
+        document.getElementById('logoutModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeLogoutModal();
+            }
+        });
+
+        function toggleMobileMenu() {
+            const menu = document.getElementById('mobileMenu');
+            menu.classList.toggle('hidden');
+        }
+
+        // Close mobile menu when clicking outside
+        document.addEventListener('click', function(e) {
+            const menu = document.getElementById('mobileMenu');
+            const menuButton = document.querySelector('[onclick="toggleMobileMenu()"]');
+            if (!menu.contains(e.target) && !menuButton.contains(e.target) && !menu.classList.contains('hidden')) {
+                menu.classList.add('hidden');
+            }
+        });
+    </script>
 </body>
 </html> 

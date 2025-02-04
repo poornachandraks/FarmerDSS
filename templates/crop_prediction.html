@@ -2,189 +2,404 @@
 
 {% block extra_head %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />
 <style>
+    .page-container {
+        background: linear-gradient(135deg, rgba(255,255,255,0.8), rgba(240,255,240,0.8));
+        min-height: 100vh;
+        padding: 2rem 0;
+    }
+
+    .animate-fade-in {
+        animation: fadeIn 0.5s ease-out;
+    }
+
+    .animate-slide-in {
+        animation: slideIn 0.5s ease-out;
+    }
+
+    .animate-scale {
+        animation: scale 0.3s ease-out;
+    }
+
+    @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
+
+    @keyframes slideIn {
+        from { 
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        to { 
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    @keyframes scale {
+        from { 
+            transform: scale(0.95);
+            opacity: 0;
+        }
+        to { 
+            transform: scale(1);
+            opacity: 1;
+        }
+    }
+
+    .results-placeholder {
+        min-height: 200px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(135deg, rgba(255,255,255,0.9), rgba(255,255,255,0.7));
+        backdrop-filter: blur(10px);
+        border-radius: 1.5rem;
+        border: 2px dashed rgba(74, 222, 128, 0.2);
+        transition: all 0.3s ease;
+    }
+
+    .results-placeholder:hover {
+        border-color: rgba(74, 222, 128, 0.4);
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(0,0,0,0.1);
+    }
+
+    .gradient-border {
+        position: relative;
+        background: linear-gradient(135deg, rgba(255,255,255,0.95), rgba(255,255,255,0.9));
+        backdrop-filter: blur(10px);
+        border-radius: 1.5rem;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .gradient-border:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(0,0,0,0.08);
+    }
+
+    .gradient-border::before {
+        content: '';
+        position: absolute;
+        top: -2px;
+        left: -2px;
+        right: -2px;
+        bottom: -2px;
+        background: linear-gradient(135deg, #4ade80, #60a5fa);
+        border-radius: 1.6rem;
+        z-index: -1;
+        opacity: 0.15;
+        transition: opacity 0.3s ease;
+    }
+
+    .gradient-border:hover::before {
+        opacity: 0.25;
+    }
+
+    .map-container {
+        position: relative;
+        border-radius: 1rem;
+        overflow: hidden;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        transition: all 0.3s ease;
+    }
+
+    .map-container:hover {
+        box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+    }
+
+    #map {
+        border-radius: 1rem;
+        z-index: 1;
+    }
+
     .weather-card {
-        background: linear-gradient(135deg, #6B8E23, #556B2F);
-        border-radius: 15px;
-        padding: 20px;
-        color: white;
-        margin-bottom: 20px;
+        transition: all 0.3s ease;
+        position: relative;
+        overflow: hidden;
     }
-    .weather-value {
-        font-size: 24px;
-        font-weight: bold;
+
+    .weather-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: linear-gradient(135deg, rgba(74, 222, 128, 0.1), rgba(96, 165, 250, 0.1));
+        opacity: 0;
+        transition: opacity 0.3s ease;
     }
-    .input-group {
-        margin-bottom: 1.5rem;
+
+    .weather-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 20px rgba(0,0,0,0.1);
     }
-    .input-group label {
-        display: block;
-        margin-bottom: 0.5rem;
-        color: #374151;
-        font-weight: 500;
+
+    .weather-card:hover::before {
+        opacity: 1;
     }
-    .input-group input {
-        width: 100%;
-        padding: 0.5rem;
-        border: 1px solid #D1D5DB;
-        border-radius: 0.375rem;
-        transition: border-color 0.15s ease-in-out;
+
+    .prediction-card {
+        transition: all 0.3s ease;
+        position: relative;
+        overflow: hidden;
     }
-    .input-group input:focus {
-        outline: none;
-        border-color: #6B8E23;
-        box-shadow: 0 0 0 3px rgba(107, 142, 35, 0.1);
+
+    .prediction-card:hover {
+        transform: translateY(-3px) scale(1.01);
+        box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+    }
+
+    .progress-bar {
+        position: relative;
+        overflow: hidden;
+    }
+
+    .progress-bar::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: linear-gradient(90deg, rgba(255,255,255,0.1), rgba(255,255,255,0.3), rgba(255,255,255,0.1));
+        transform: translateX(-100%);
+        animation: shimmer 2s infinite;
+    }
+
+    @keyframes shimmer {
+        100% {
+            transform: translateX(100%);
+        }
+    }
+
+    .btn-primary {
+        background: linear-gradient(135deg, #4ade80, #60a5fa);
+        transition: all 0.3s ease;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 15px rgba(74, 222, 128, 0.3);
+    }
+
+    .btn-primary::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+        transform: translateX(-100%);
+        transition: transform 0.3s ease;
+    }
+
+    .btn-primary:hover::after {
+        transform: translateX(100%);
+    }
+
+    .gradient-text {
+        background: linear-gradient(135deg, #059669, #2563eb);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
     }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="max-w-7xl mx-auto px-4 py-6">
-    <h2 class="text-2xl font-bold text-gray-900 mb-6">Crop Prediction Tool</h2>
-    
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <!-- Left Column: Form -->
-        <div class="bg-white p-6 rounded-lg shadow-md">
-            <h3 class="text-xl font-semibold text-gray-800 mb-4">Soil Parameters</h3>
-            <form id="predictionForm">
-                <div class="grid grid-cols-2 gap-4">
-                    <div class="input-group">
-                        <label for="nitrogen">Nitrogen (N) Content</label>
-                        <input type="number" step="0.01" id="nitrogen" name="nitrogen" required
-                               placeholder="mg/kg" min="0" max="140">
-                    </div>
-                    
-                    <div class="input-group">
-                        <label for="phosphorus">Phosphorus (P) Content</label>
-                        <input type="number" step="0.01" id="phosphorus" name="phosphorus" required
-                               placeholder="mg/kg" min="0" max="145">
-                    </div>
-                    
-                    <div class="input-group">
-                        <label for="potassium">Potassium (K) Content</label>
-                        <input type="number" step="0.01" id="potassium" name="potassium" required
-                               placeholder="mg/kg" min="0" max="205">
-                    </div>
-                    
-                    <div class="input-group">
-                        <label for="ph">pH Level</label>
-                        <input type="number" step="0.1" id="ph" name="ph" required
-                               placeholder="0-14" min="0" max="14">
-                    </div>
-                </div>
-
-                <input type="hidden" id="latitude" name="latitude">
-                <input type="hidden" id="longitude" name="longitude">
-                
-                <button type="submit" 
-                        class="w-full mt-4 bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-colors">
-                    Predict Suitable Crop
-                </button>
-            </form>
-
-            <!-- Weather Data Display -->
-            <div id="weatherData" class="mt-6 hidden">
-                <h3 class="text-xl font-semibold text-gray-800 mb-4">Local Weather Conditions</h3>
-                <div class="grid grid-cols-3 gap-4">
-                    <div class="weather-card">
-                        <div class="text-sm opacity-80">Temperature</div>
-                        <div class="weather-value"><span id="temperature">-</span>°C</div>
-                    </div>
-                    <div class="weather-card">
-                        <div class="text-sm opacity-80">Humidity</div>
-                        <div class="weather-value"><span id="humidity">-</span>%</div>
-                    </div>
-                    <div class="weather-card">
-                        <div class="text-sm opacity-80">Daily Rainfall</div>
-                        <div class="weather-value"><span id="daily_rainfall">-</span>mm</div>
-                    </div>
-                </div>
-            </div>
+<div class="page-container">
+    <div class="container mx-auto px-4">
+        <div class="text-center mb-8 animate-fade-in">
+            <h1 class="text-5xl font-bold gradient-text mb-4">Crop Prediction Tool</h1>
+            <p class="text-gray-600 text-xl">Get personalized crop recommendations based on your soil conditions</p>
         </div>
 
-        <!-- Right Column: Map and Results -->
-        <div>
-            <!-- Map Section -->
-            <div class="bg-white p-6 rounded-lg shadow-md mb-6">
-                <h3 class="text-xl font-semibold text-gray-800 mb-4">Select Location</h3>
-                <div id="map" class="h-[400px] rounded-lg"></div>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+            <!-- Input Form -->
+            <div class="gradient-border p-6 animate-slide-in">
+                <div class="text-center mb-8">
+                    <div class="inline-block p-4 rounded-full bg-gradient-to-br from-green-100 to-blue-100 mb-4">
+                        <i class="fas fa-seedling text-3xl text-green-600"></i>
+                    </div>
+                    <h2 class="text-2xl font-bold gradient-text mb-2">Soil Parameters</h2>
+                    <p class="text-gray-600">Enter your soil conditions below</p>
+                </div>
+
+                <form id="predictionForm" class="space-y-6">
+                    <!-- NPK Values -->
+                    <div class="grid grid-cols-3 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Nitrogen (N)</label>
+                            <input type="number" name="nitrogen" required min="0" max="140" step="0.1"
+                                   class="w-full rounded-lg border-gray-300 focus:border-green-500 focus:ring-green-500">
+                            <p class="mt-1 text-xs text-gray-500">Range: 0-140 kg/ha</p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Phosphorus (P)</label>
+                            <input type="number" name="phosphorus" required min="0" max="145" step="0.1"
+                                   class="w-full rounded-lg border-gray-300 focus:border-green-500 focus:ring-green-500">
+                            <p class="mt-1 text-xs text-gray-500">Range: 0-145 kg/ha</p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Potassium (K)</label>
+                            <input type="number" name="potassium" required min="0" max="205" step="0.1"
+                                   class="w-full rounded-lg border-gray-300 focus:border-green-500 focus:ring-green-500">
+                            <p class="mt-1 text-xs text-gray-500">Range: 0-205 kg/ha</p>
+                        </div>
+                    </div>
+
+                    <!-- pH Value -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">pH Level</label>
+                        <input type="number" name="ph" required min="0" max="14" step="0.1"
+                               class="w-full rounded-lg border-gray-300 focus:border-green-500 focus:ring-green-500">
+                        <p class="mt-1 text-xs text-gray-500">Range: 0-14</p>
+                    </div>
+
+                    <!-- Location -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Location</label>
+                        <div class="map-container">
+                            <div id="map" class="w-full h-64 mb-2"></div>
+                        </div>
+                        <div id="selectedLocation" class="text-sm text-gray-600 p-3 bg-gray-50 rounded-lg mt-3 hidden">
+                            <div class="flex items-start space-x-2">
+                                <i class="fas fa-map-marker-alt text-red-500 mt-1"></i>
+                                <div>
+                                    <p class="font-medium" id="locationDistrict"></p>
+                                    <p class="text-gray-500" id="locationState"></p>
+                                    <p class="text-xs text-gray-400" id="locationCoords"></p>
+                                </div>
+                            </div>
+                        </div>
+                        <input type="hidden" name="latitude" id="latitude">
+                        <input type="hidden" name="longitude" id="longitude">
+                    </div>
+
+                    <!-- Weather Info -->
+                    <div id="weatherInfo" class="hidden space-y-4">
+                        <h3 class="text-lg font-medium text-gray-900">Current Weather Conditions</h3>
+                        <div class="grid grid-cols-3 gap-4">
+                            <div class="weather-card text-center p-3 rounded-lg bg-gradient-to-br from-green-50 to-blue-50">
+                                <i class="fas fa-temperature-high text-orange-500 mb-1"></i>
+                                <p class="text-sm font-medium" id="temperature">-</p>
+                                <p class="text-xs text-gray-600">Temperature</p>
+                            </div>
+                            <div class="weather-card text-center p-3 rounded-lg bg-gradient-to-br from-green-50 to-blue-50">
+                                <i class="fas fa-droplet text-blue-500 mb-1"></i>
+                                <p class="text-sm font-medium" id="humidity">-</p>
+                                <p class="text-xs text-gray-600">Humidity</p>
+                            </div>
+                            <div class="weather-card text-center p-3 rounded-lg bg-gradient-to-br from-green-50 to-blue-50">
+                                <i class="fas fa-cloud-rain text-indigo-500 mb-1"></i>
+                                <p class="text-sm font-medium" id="rainfall">-</p>
+                                <p class="text-xs text-gray-600">Rainfall</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button type="submit" 
+                            class="w-full btn-primary text-white py-3 px-4 rounded-lg text-lg font-medium flex items-center justify-center">
+                        <i class="fas fa-magic mr-2"></i>
+                        Predict Suitable Crops
+                    </button>
+                </form>
             </div>
 
-            <!-- Prediction Result -->
-            <div id="result" class="hidden bg-white p-6 rounded-lg shadow-md">
-                <h3 class="text-xl font-semibold text-gray-800 mb-4">Recommended Crops</h3>
-                
-                <!-- Main prediction -->
-                <div class="mb-6">
-                    <div class="text-lg text-gray-600 mb-2">Best Match:</div>
-                    <div id="prediction" class="text-2xl font-bold text-green-600"></div>
-                </div>
-                
-                <!-- Comparison Section -->
-                <div class="mb-6">
-                    <h4 class="text-lg text-gray-600 mb-3">Parameter Comparison</h4>
-                    <div class="grid grid-cols-3 gap-4 text-sm">
-                        <div class="bg-gray-50 p-3 rounded">
-                            <div class="font-medium">NPK Values</div>
-                            <div class="mt-1 space-y-1">
-                                <div>Given N: <span id="given-n" class="font-semibold"></span></div>
-                                <div>Ideal N: <span id="ideal-n" class="font-semibold"></span></div>
-                            </div>
-                            <div class="mt-1 space-y-1">
-                                <div>Given P: <span id="given-p" class="font-semibold"></span></div>
-                                <div>Ideal P: <span id="ideal-p" class="font-semibold"></span></div>
-                            </div>
-                            <div class="mt-1 space-y-1">
-                                <div>Given K: <span id="given-k" class="font-semibold"></span></div>
-                                <div>Ideal K: <span id="ideal-k" class="font-semibold"></span></div>
-                            </div>
+            <!-- Results Section -->
+            <div id="resultsSection" class="hidden animate-slide-in">
+                <div class="gradient-border p-6">
+                    <div class="text-center mb-8">
+                        <div class="inline-block p-4 rounded-full bg-gradient-to-br from-green-100 to-blue-100 mb-4">
+                            <i class="fas fa-leaf text-3xl text-green-600"></i>
                         </div>
-                        <div class="bg-gray-50 p-3 rounded">
-                            <div class="font-medium">pH Level</div>
-                            <div class="mt-1 space-y-1">
-                                <div>Given pH: <span id="given-ph" class="font-semibold"></span></div>
-                                <div>Ideal pH: <span id="ideal-ph" class="font-semibold"></span></div>
-                            </div>
-                        </div>
-                        <div class="bg-gray-50 p-3 rounded">
-                            <div class="font-medium">Climate</div>
-                            <div class="mt-1 space-y-1">
-                                <div>Current Temp: <span id="given-temp" class="font-semibold"></span>°C</div>
-                                <div>Ideal Temp: <span id="ideal-temp" class="font-semibold"></span>°C</div>
-                            </div>
-                            <div class="mt-1 space-y-1">
-                                <div>Current Humidity: <span id="given-humidity" class="font-semibold"></span>%</div>
-                                <div>Ideal Humidity: <span id="ideal-humidity" class="font-semibold"></span>%</div>
-                            </div>
-                        </div>
+                        <h2 class="text-2xl font-bold gradient-text mb-2">Prediction Results</h2>
+                        <p class="text-gray-600">Most suitable crops for your conditions</p>
                     </div>
-                </div>
-                
-                <!-- Top 3 predictions -->
-                <div id="top_predictions" class="space-y-4">
-                    <div class="text-lg text-gray-600 mb-2">Alternative Options:</div>
-                    <div class="grid grid-cols-3 gap-4">
-                        <div class="bg-gray-50 p-4 rounded-lg">
-                            <div id="crop1" class="font-semibold text-lg text-green-700"></div>
-                            <div id="prob1" class="text-sm text-gray-600"></div>
-                        </div>
-                        <div class="bg-gray-50 p-4 rounded-lg">
-                            <div id="crop2" class="font-semibold text-lg text-green-700"></div>
-                            <div id="prob2" class="text-sm text-gray-600"></div>
-                        </div>
-                        <div class="bg-gray-50 p-4 rounded-lg">
-                            <div id="crop3" class="font-semibold text-lg text-green-700"></div>
-                            <div id="prob3" class="text-sm text-gray-600"></div>
-                        </div>
-                    </div>
-                </div>
 
-                <!-- Add redirect button -->
-                <div class="mt-6">
-                    <button onclick="redirectToDashboard()" 
-                            class="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors">
-                        View Crop Details in Dashboard
-                    </button>
+                    <!-- Top Predictions -->
+                    <div class="space-y-6">
+                        <div class="p-6 rounded-xl bg-gradient-to-br from-green-50 to-blue-50 transform transition-all hover:scale-[1.02]">
+                            <div class="flex items-center justify-between mb-4">
+                                <div class="flex items-center space-x-3">
+                                    <div class="p-2 rounded-lg bg-green-100">
+                                        <i class="fas fa-crown text-yellow-600"></i>
+                                    </div>
+                                    <div>
+                                        <h3 class="text-xl font-semibold gradient-text" id="crop1"></h3>
+                                        <p class="text-sm text-gray-600">Top Recommendation</p>
+                                    </div>
+                                </div>
+                                <div class="text-right">
+                                    <div class="text-2xl font-bold text-green-600" id="prob1"></div>
+                                    <p class="text-sm text-gray-500">Confidence</p>
+                                </div>
+                            </div>
+                            <div class="w-full bg-white/50 rounded-full h-2.5 overflow-hidden">
+                                <div id="prob1Bar" class="h-full bg-gradient-to-r from-green-500 to-blue-500 transition-all duration-500"></div>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="p-4 rounded-xl bg-gradient-to-br from-green-50 to-blue-50 transform transition-all hover:scale-[1.02]">
+                                <div class="flex items-center justify-between mb-3">
+                                    <div class="flex items-center space-x-2">
+                                        <div class="p-1.5 rounded-lg bg-green-100">
+                                            <i class="fas fa-medal text-gray-400"></i>
+                                        </div>
+                                        <h3 class="text-lg font-semibold gradient-text" id="crop2"></h3>
+                                    </div>
+                                    <div class="text-right">
+                                        <div class="text-lg font-bold text-green-600" id="prob2"></div>
+                                    </div>
+                                </div>
+                                <div class="w-full bg-white/50 rounded-full h-2 overflow-hidden">
+                                    <div id="prob2Bar" class="h-full bg-gradient-to-r from-green-500 to-blue-500 transition-all duration-500"></div>
+                                </div>
+                            </div>
+
+                            <div class="p-4 rounded-xl bg-gradient-to-br from-green-50 to-blue-50 transform transition-all hover:scale-[1.02]">
+                                <div class="flex items-center justify-between mb-3">
+                                    <div class="flex items-center space-x-2">
+                                        <div class="p-1.5 rounded-lg bg-green-100">
+                                            <i class="fas fa-award text-yellow-700"></i>
+                                        </div>
+                                        <h3 class="text-lg font-semibold gradient-text" id="crop3"></h3>
+                                    </div>
+                                    <div class="text-right">
+                                        <div class="text-lg font-bold text-green-600" id="prob3"></div>
+                                    </div>
+                                </div>
+                                <div class="w-full bg-white/50 rounded-full h-2 overflow-hidden">
+                                    <div id="prob3Bar" class="h-full bg-gradient-to-r from-green-500 to-blue-500 transition-all duration-500"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- View Details Button -->
+                    <div class="mt-8">
+                        <button onclick="redirectToDashboard()" 
+                                class="w-full bg-white text-gray-800 py-3 px-4 rounded-lg text-lg font-medium border-2 border-green-500 hover:bg-green-50 transition-colors flex items-center justify-center">
+                            <i class="fas fa-info-circle mr-2"></i>
+                            View Detailed Information
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Results Placeholder -->
+            <div id="resultsPlaceholder" class="results-placeholder animate-fade-in">
+                <div class="text-center text-gray-500">
+                    <i class="fas fa-seedling text-4xl mb-4 text-green-400"></i>
+                    <p class="text-lg">Enter soil parameters and select a location<br>to get crop predictions</p>
                 </div>
             </div>
         </div>
@@ -193,117 +408,128 @@
 {% endblock %}
 
 {% block extra_scripts %}
+{{ super() }}
 <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
 <script>
     // Initialize map
-    var map = L.map('map').setView([20.5937, 78.9629], 5);
+    const map = L.map('map').setView([20.5937, 78.9629], 5);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-    var marker;
-    
+    let marker = null;
+    let selectedLatLng = null;
+
     map.on('click', function(e) {
         if (marker) {
             map.removeLayer(marker);
         }
-        marker = L.marker(e.latlng).addTo(map);
         
-        document.getElementById('latitude').value = e.latlng.lat;
-        document.getElementById('longitude').value = e.latlng.lng;
+        selectedLatLng = e.latlng;
+        marker = L.marker(selectedLatLng).addTo(map);
         
-        // Fetch weather data for clicked location
-        fetch(`/update_weather?lat=${e.latlng.lat}&lon=${e.latlng.lng}`)
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    // Show weather data section
-                    document.getElementById('weatherData').classList.remove('hidden');
-                    
-                    // Update weather display
-                    document.getElementById('temperature').textContent = data.weather[1];
-                    document.getElementById('humidity').textContent = data.weather[2];
-                    document.getElementById('daily_rainfall').textContent = data.weather[3];
-                } else {
-                    console.error('Failed to fetch weather data');
-                }
-            })
-            .catch(error => console.error('Error:', error));
+        document.getElementById('latitude').value = selectedLatLng.lat;
+        document.getElementById('longitude').value = selectedLatLng.lng;
+        
+        // Update weather and location info
+        updateWeatherInfo(selectedLatLng.lat, selectedLatLng.lng);
     });
 
-    // Handle form submission
-    document.getElementById('predictionForm').onsubmit = function(e) {
-        e.preventDefault();
-        
-        const formData = new FormData(e.target);
-        
-        fetch('/crop_prediction/predict', {
-            method: 'POST',
-            body: formData
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                // Update weather display
-                document.getElementById('temperature').textContent = data.weather.temperature.toFixed(1);
-                document.getElementById('humidity').textContent = data.weather.humidity.toFixed(1);
-                document.getElementById('daily_rainfall').textContent = data.weather.rainfall.toFixed(1);
+    async function updateWeatherInfo(lat, lng) {
+        try {
+            const response = await fetch(`/update_weather?lat=${lat}&lon=${lng}`);
+            const data = await response.json();
+            
+            console.log('Weather API Response:', data);
+            
+            if (response.ok && data.success) {
+                document.getElementById('weatherInfo').classList.remove('hidden');
+                document.getElementById('selectedLocation').classList.remove('hidden');
                 
-                // Show prediction section
-                document.getElementById('result').classList.remove('hidden');
-                
-                // Update main prediction
-                document.getElementById('prediction').textContent = data.prediction;
-                
-                // Update comparison values
-                document.getElementById('given-n').textContent = formData.get('nitrogen');
-                document.getElementById('given-p').textContent = formData.get('phosphorus');
-                document.getElementById('given-k').textContent = formData.get('potassium');
-                document.getElementById('given-ph').textContent = formData.get('ph');
-                document.getElementById('given-temp').textContent = data.weather.temperature.toFixed(1);
-                document.getElementById('given-humidity').textContent = data.weather.humidity.toFixed(1);
-                
-                // Fetch and update ideal values
-                fetch(`/get_crop_details/${encodeURIComponent(data.prediction)}`)
-                    .then(response => response.json())
-                    .then(cropDetails => {
-                        document.getElementById('ideal-n').textContent = cropDetails.nitrogen;
-                        document.getElementById('ideal-p').textContent = cropDetails.phosphorus;
-                        document.getElementById('ideal-k').textContent = cropDetails.potassium;
-                        document.getElementById('ideal-ph').textContent = cropDetails.ph;
-                        document.getElementById('ideal-temp').textContent = cropDetails.temperature;
-                        document.getElementById('ideal-humidity').textContent = cropDetails.humidity;
-                    });
-                
-                // Update top 3 predictions if available
-                if (data.top_predictions) {
-                    document.getElementById('top_predictions').classList.remove('hidden');
+                if (data.weather && Array.isArray(data.weather)) {
+                    // Weather array format: [location, temperature, humidity, rainfall]
+                    const [location, temp, humidity, rainfall] = data.weather;
                     
-                    // Update each prediction card
-                    data.top_predictions.forEach((pred, index) => {
-                        const cropElement = document.getElementById(`crop${index + 1}`);
-                        const probElement = document.getElementById(`prob${index + 1}`);
-                        
-                        if (cropElement && probElement) {
-                            cropElement.textContent = pred.crop;
-                            probElement.textContent = `${(pred.probability * 100).toFixed(1)}% confidence`;
-                        }
+                    // Update weather display
+                    document.getElementById('temperature').textContent = `${temp?.toFixed(1) || '-'}°C`;
+                    document.getElementById('humidity').textContent = `${humidity || '-'}%`;
+                    document.getElementById('rainfall').textContent = `${rainfall?.toFixed(1) || '0.0'} mm`;
+                    
+                    // Parse location string (format: "District, State, Country")
+                    const locationParts = location.split(',').map(part => part.trim());
+                    const [district, state, country] = locationParts;
+                    
+                    // Update location display
+                    document.getElementById('locationDistrict').textContent = district || 'Unknown District';
+                    document.getElementById('locationState').textContent = 
+                        state && country ? `${state}, ${country}` : location;
+                    document.getElementById('locationCoords').textContent = 
+                        `${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E`;
+
+                    // Debug logs
+                    console.log('Location Details:', {
+                        district,
+                        state,
+                        country,
+                        location
                     });
-                } else {
-                    document.getElementById('top_predictions').classList.add('hidden');
                 }
             } else {
-                alert(data.message || 'Failed to make prediction');
+                throw new Error(`Server returned ${response.status}: ${response.statusText}`);
             }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            alert('An error occurred while making the prediction. Please try again.');
-        });
-    };
+        } catch (error) {
+            console.error('Error updating weather:', error);
+            document.getElementById('selectedLocation').classList.remove('hidden');
+            document.getElementById('locationDistrict').textContent = "Error fetching location";
+            document.getElementById('locationState').textContent = "Please try again";
+            document.getElementById('locationCoords').textContent = 
+                `${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E`;
+        }
+    }
 
-    // Add this function to your existing JavaScript
+    // Handle form submission
+    document.getElementById('predictionForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        if (!selectedLatLng) {
+            alert('Please select a location on the map');
+            return;
+        }
+        
+        const formData = new FormData(this);
+        
+        try {
+            const response = await fetch('/crop_prediction/predict', {
+                method: 'POST',
+                body: formData
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                document.getElementById('resultsSection').classList.remove('hidden');
+                
+                // Update predictions display
+                data.top_predictions.forEach((pred, index) => {
+                    const num = index + 1;
+                    document.getElementById(`crop${num}`).textContent = pred.crop;
+                    document.getElementById(`prob${num}`).textContent = `${(pred.probability * 100).toFixed(1)}%`;
+                    document.getElementById(`prob${num}Bar`).style.width = `${pred.probability * 100}%`;
+                });
+                
+                // Scroll to results
+                document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth' });
+            } else {
+                alert(data.message || 'Error making prediction');
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            alert('Error making prediction');
+        }
+    });
+
     function redirectToDashboard() {
-        const predictedCrop = document.getElementById('prediction').textContent;
-        window.location.href = `/dashboard?highlight=${encodeURIComponent(predictedCrop)}`;
+        const topCrop = document.getElementById('crop1').textContent;
+        window.location.href = `/dashboard?highlight=${topCrop.toLowerCase()}`;
     }
 </script>
 {% endblock %} 

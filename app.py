@@ -11,9 +11,10 @@ import numpy as np
 import os
 from joblib import load
 import pandas as pd
+from config import FLASK_SECRET_KEY
 
 app = Flask(__name__)
-app.secret_key = 'your_secret_key_here'  # Change this to a secure secret key
+app.secret_key = FLASK_SECRET_KEY  # Using value from config
 
 # Login required decorator
 def login_required(f):
@@ -72,7 +73,11 @@ def dashboard():
                 m.Year,
                 m.AveragePrice
             FROM market_trends m 
-            JOIN crop_information c ON m.CropID = c.CropID 
+            JOIN (
+                SELECT MIN(CropID) as CropID, CropName
+                FROM crop_information
+                GROUP BY CropName
+            ) c ON m.CropID = c.CropID 
             WHERE m.Year >= 2023
             ORDER BY c.CropName, m.Year DESC, m.Month DESC
         ''').fetchall()
@@ -80,14 +85,18 @@ def dashboard():
         # Get unique crops for the dropdown
         unique_crops = c.execute('''
             SELECT DISTINCT c.CropID, c.CropName
-            FROM crop_information c
+            FROM (
+                SELECT MIN(CropID) as CropID, CropName
+                FROM crop_information
+                GROUP BY CropName
+            ) c
             JOIN market_trends m ON c.CropID = m.CropID
             ORDER BY c.CropName
         ''').fetchall()
         
         # Fetch crop information with fertilizer requirements
         crop_data = c.execute('''
-            SELECT 
+            SELECT DISTINCT
                 c.CropName,
                 c.CropType,
                 c.IdealSoilType,
@@ -99,19 +108,23 @@ def dashboard():
                 f.PotassiumReq || ' kg/acre K' as Fertilizers
             FROM crop_information c
             LEFT JOIN fertilizer_requirements f ON c.CropID = f.CropID
-            GROUP BY c.CropID
+            GROUP BY c.CropName
             ORDER BY c.CropName
         ''').fetchall()
         
         # Fetch active subsidies
         subsidies = c.execute('''
-            SELECT 
+            SELECT DISTINCT
                 c.CropName,
                 s.SubsidyName,
                 s.EligibilityCriteria,
                 s.Amount
             FROM subsidy_information s
-            JOIN crop_information c ON s.CropID = c.CropID
+            JOIN (
+                SELECT MIN(CropID) as CropID, CropName
+                FROM crop_information
+                GROUP BY CropName
+            ) c ON s.CropID = c.CropID
             ORDER BY s.Amount DESC
         ''').fetchall()
         
@@ -249,54 +262,77 @@ def predict():
                 'message': 'Failed to fetch weather data'
             })
         
-        # Log weather data
-        logging.info(f"""
-        Weather Data:
-        - Temperature: {weather_data['temperature']}
-        - Humidity: {weather_data['humidity']}
-        - Rainfall: {weather_data['rainfall']}
-        """)
-        
         # Prepare input features with correct column names
         features = pd.DataFrame([[
             nitrogen, phosphorus, potassium,
             weather_data['temperature'],
             weather_data['humidity'],
-            ph  # The value is still called 'ph' in our code, but the column name is 'pH_Value'
+            ph
         ]], columns=FEATURE_NAMES)
-        
-        # Log the features
-        logging.info(f"Features shape: {features.shape}")
-        logging.info(f"Features with names:\n{features}")
         
         # Make prediction
         try:
             prediction_result = model.predict(features)[0]
-            logging.info(f"Raw prediction result: {prediction_result}")
+            probabilities = model.predict_proba(features)[0] if hasattr(model, 'predict_proba') else None
             
-            # Get prediction probabilities
-            if hasattr(model, 'predict_proba'):
-                probabilities = model.predict_proba(features)[0]
-                
-                # Only include predictions with probability > 1%
-                significant_predictions = []
+            # Get top predictions
+            significant_predictions = []
+            if probabilities is not None:
                 sorted_idx = np.argsort(probabilities)[::-1]
-                
                 for idx in sorted_idx:
                     prob = probabilities[idx]
-                    if prob > 0.01:  # More than 1% probability
+                    if prob > 0.01:
                         crop = CROP_MAPPING.get(idx, 'unknown')
                         significant_predictions.append({
                             'crop': crop.title(),
                             'probability': float(prob)
                         })
-                        logging.info(f"Significant crop: {crop}, Probability: {prob:.3f}")
                 
-                # Take top 3 from significant predictions
-                top_3_crops = significant_predictions[:3]
-                
-            # Use the highest probability prediction
-            prediction = top_3_crops[0]['crop'] if top_3_crops else CROP_MAPPING.get(prediction_result, 'unknown').title()
+            # Take top 3 predictions
+            top_3_crops = significant_predictions[:3]
+            
+            # Save prediction to database
+            conn = sqlite3.connect('farmer_app.db')
+            c = conn.cursor()
+            try:
+                c.execute('''
+                    INSERT INTO prediction_history 
+                    (UserID, Nitrogen, Phosphorus, Potassium, Temperature, 
+                     Humidity, pH, Location, PredictedCrop, Probability)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    session['user_id'],
+                    nitrogen,
+                    phosphorus,
+                    potassium,
+                    weather_data['temperature'],
+                    weather_data['humidity'],
+                    ph,
+                    f"{latitude}, {longitude}",
+                    top_3_crops[0]['crop'],
+                    top_3_crops[0]['probability']
+                ))
+                conn.commit()
+            except Exception as e:
+                logging.error(f"Error saving prediction: {e}")
+                conn.rollback()
+            finally:
+                conn.close()
+            
+            # Prepare response
+            response_data = {
+                'success': True,
+                'prediction': top_3_crops[0]['crop'],
+                'weather': {
+                    'region': str(weather_data['region']),
+                    'temperature': float(weather_data['temperature']),
+                    'humidity': float(weather_data['humidity']),
+                    'rainfall': float(weather_data['rainfall'])
+                },
+                'top_predictions': top_3_crops
+            }
+            
+            return jsonify(response_data)
             
         except Exception as e:
             logging.error(f"Error making prediction: {e}")
@@ -304,31 +340,7 @@ def predict():
                 'success': False,
                 'message': f'Error making prediction: {str(e)}'
             })
-        
-        # Convert weather data to standard Python types
-        weather_response = {
-            'region': str(weather_data['region']),
-            'temperature': float(weather_data['temperature']),
-            'humidity': float(weather_data['humidity']),
-            'rainfall': float(weather_data['rainfall'])
-        }
-        
-        # Prepare response
-        response_data = {
-            'success': True,
-            'prediction': prediction,
-            'weather': weather_response
-        }
-        
-        # Add probabilities to response if available
-        if 'top_3_crops' in locals():
-            response_data['top_predictions'] = top_3_crops
-        
-        # Log the response for debugging
-        logging.info(f"Sending response: {response_data}")
-        
-        return jsonify(response_data)
-        
+            
     except Exception as e:
         logging.error(f"Error in prediction route: {e}")
         return jsonify({
@@ -421,5 +433,347 @@ def get_crop_details(crop_name):
 # Load crop data
 df = pd.read_csv('data/Best_Values.csv')  # Updated path
 
+# Database Management Routes
+
+@app.route('/manage/crops', methods=['GET'])
+@login_required
+def manage_crops():
+    conn = sqlite3.connect('farmer_app.db')
+    c = conn.cursor()
+    try:
+        crops = c.execute('''
+            SELECT DISTINCT
+                c.CropID,
+                c.CropName,
+                c.CropType,
+                c.IdealSoilType,
+                c.IdealTemperature,
+                c.IdealHumidity,
+                c.IdealPH,
+                f.NitrogenReq,
+                f.PhosphorusReq,
+                f.PotassiumReq
+            FROM crop_information c
+            LEFT JOIN fertilizer_requirements f ON c.CropID = f.CropID
+            GROUP BY c.CropName
+            ORDER BY c.CropName
+        ''').fetchall()
+        return render_template('manage/crops.html', crops=crops)
+    except Exception as e:
+        flash(f'Error fetching crops: {str(e)}')
+        return redirect(url_for('dashboard'))
+    finally:
+        conn.close()
+
+@app.route('/manage/crops/add', methods=['POST'])
+@login_required
+def add_crop():
+    if session.get('role') != 'admin':
+        flash('Only administrators can add crops')
+        return redirect(url_for('manage_crops'))
+        
+    conn = sqlite3.connect('farmer_app.db')
+    c = conn.cursor()
+    try:
+        # Extract form data
+        crop_name = request.form['crop_name']
+        crop_type = request.form['crop_type']
+        soil_type = request.form['soil_type']
+        temperature = request.form['temperature']
+        humidity = request.form['humidity']
+        ph = request.form['ph']
+        nitrogen = request.form['nitrogen']
+        phosphorus = request.form['phosphorus']
+        potassium = request.form['potassium']
+        
+        # Insert into crop_information
+        c.execute('''
+            INSERT INTO crop_information 
+            (CropName, CropType, IdealSoilType, IdealTemperature, IdealHumidity, IdealPH)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (crop_name, crop_type, soil_type, temperature, humidity, ph))
+        
+        crop_id = c.lastrowid
+        
+        # Insert into fertilizer_requirements
+        c.execute('''
+            INSERT INTO fertilizer_requirements 
+            (CropID, NitrogenReq, PhosphorusReq, PotassiumReq)
+            VALUES (?, ?, ?, ?)
+        ''', (crop_id, nitrogen, phosphorus, potassium))
+        
+        conn.commit()
+        flash('Crop added successfully')
+        
+    except Exception as e:
+        conn.rollback()
+        flash(f'Error adding crop: {str(e)}')
+    finally:
+        conn.close()
+    return redirect(url_for('manage_crops'))
+
+@app.route('/manage/crops/edit/<int:crop_id>', methods=['POST'])
+@login_required
+def edit_crop(crop_id):
+    if session.get('role') != 'admin':
+        flash('Only administrators can edit crops')
+        return redirect(url_for('manage_crops'))
+        
+    conn = sqlite3.connect('farmer_app.db')
+    c = conn.cursor()
+    try:
+        # Extract form data
+        crop_name = request.form['crop_name']
+        crop_type = request.form['crop_type']
+        soil_type = request.form['soil_type']
+        temperature = request.form['temperature']
+        humidity = request.form['humidity']
+        ph = request.form['ph']
+        nitrogen = request.form['nitrogen']
+        phosphorus = request.form['phosphorus']
+        potassium = request.form['potassium']
+        
+        # Update crop_information
+        c.execute('''
+            UPDATE crop_information 
+            SET CropName=?, CropType=?, IdealSoilType=?, 
+                IdealTemperature=?, IdealHumidity=?, IdealPH=?
+            WHERE CropID=?
+        ''', (crop_name, crop_type, soil_type, temperature, humidity, ph, crop_id))
+        
+        # Update fertilizer_requirements
+        c.execute('''
+            UPDATE fertilizer_requirements 
+            SET NitrogenReq=?, PhosphorusReq=?, PotassiumReq=?
+            WHERE CropID=?
+        ''', (nitrogen, phosphorus, potassium, crop_id))
+        
+        conn.commit()
+        flash('Crop updated successfully')
+        
+    except Exception as e:
+        conn.rollback()
+        flash(f'Error updating crop: {str(e)}')
+    finally:
+        conn.close()
+    return redirect(url_for('manage_crops'))
+
+@app.route('/manage/crops/delete/<int:crop_id>', methods=['POST'])
+@login_required
+def delete_crop(crop_id):
+    if session.get('role') != 'admin':
+        flash('Only administrators can delete crops')
+        return redirect(url_for('manage_crops'))
+        
+    conn = sqlite3.connect('farmer_app.db')
+    c = conn.cursor()
+    try:
+        # Delete from fertilizer_requirements first (foreign key)
+        c.execute('DELETE FROM fertilizer_requirements WHERE CropID = ?', (crop_id,))
+        # Delete from crop_information
+        c.execute('DELETE FROM crop_information WHERE CropID = ?', (crop_id,))
+        conn.commit()
+        flash('Crop deleted successfully')
+    except Exception as e:
+        conn.rollback()
+        flash(f'Error deleting crop: {str(e)}')
+    finally:
+        conn.close()
+    return redirect(url_for('manage_crops'))
+
+@app.route('/manage/subsidies', methods=['GET'])
+@login_required
+def manage_subsidies():
+    conn = sqlite3.connect('farmer_app.db')
+    c = conn.cursor()
+    try:
+        subsidies = c.execute('''
+            SELECT DISTINCT
+                s.SubsidyID,
+                s.SubsidyName,
+                s.EligibilityCriteria,
+                s.Amount,
+                c.CropName
+            FROM subsidy_information s
+            JOIN (
+                SELECT MIN(CropID) as CropID, CropName
+                FROM crop_information
+                GROUP BY CropName
+            ) c ON s.CropID = c.CropID
+            ORDER BY s.Amount DESC
+        ''').fetchall()
+        
+        # Get unique crops for the add subsidy form
+        crops = c.execute('''
+            SELECT MIN(CropID) as CropID, CropName 
+            FROM crop_information 
+            GROUP BY CropName 
+            ORDER BY CropName
+        ''').fetchall()
+        
+        return render_template('manage/subsidies.html', subsidies=subsidies, crops=crops)
+    except Exception as e:
+        flash(f'Error fetching subsidies: {str(e)}')
+        return redirect(url_for('dashboard'))
+    finally:
+        conn.close()
+
+@app.route('/manage/subsidies/add', methods=['POST'])
+@login_required
+def add_subsidy():
+    if session.get('role') != 'admin':
+        flash('Only administrators can add subsidies')
+        return redirect(url_for('manage_subsidies'))
+        
+    conn = sqlite3.connect('farmer_app.db')
+    c = conn.cursor()
+    try:
+        subsidy_name = request.form['subsidy_name']
+        criteria = request.form['criteria']
+        amount = float(request.form['amount'])
+        crop_id = int(request.form['crop_id'])
+        
+        c.execute('''
+            INSERT INTO subsidy_information 
+            (SubsidyName, EligibilityCriteria, Amount, CropID)
+            VALUES (?, ?, ?, ?)
+        ''', (subsidy_name, criteria, amount, crop_id))
+        
+        conn.commit()
+        flash('Subsidy added successfully')
+        
+    except Exception as e:
+        conn.rollback()
+        flash(f'Error adding subsidy: {str(e)}')
+    finally:
+        conn.close()
+    return redirect(url_for('manage_subsidies'))
+
+@app.route('/manage/subsidies/edit/<int:subsidy_id>', methods=['POST'])
+@login_required
+def edit_subsidy(subsidy_id):
+    if session.get('role') != 'admin':
+        flash('Only administrators can edit subsidies')
+        return redirect(url_for('manage_subsidies'))
+        
+    conn = sqlite3.connect('farmer_app.db')
+    c = conn.cursor()
+    try:
+        subsidy_name = request.form['subsidy_name']
+        criteria = request.form['criteria']
+        amount = float(request.form['amount'])
+        crop_id = int(request.form['crop_id'])
+        
+        c.execute('''
+            UPDATE subsidy_information 
+            SET SubsidyName=?, EligibilityCriteria=?, Amount=?, CropID=?
+            WHERE SubsidyID=?
+        ''', (subsidy_name, criteria, amount, crop_id, subsidy_id))
+        
+        conn.commit()
+        flash('Subsidy updated successfully')
+        
+    except Exception as e:
+        conn.rollback()
+        flash(f'Error updating subsidy: {str(e)}')
+    finally:
+        conn.close()
+    return redirect(url_for('manage_subsidies'))
+
+@app.route('/manage/subsidies/delete/<int:subsidy_id>', methods=['POST'])
+@login_required
+def delete_subsidy(subsidy_id):
+    if session.get('role') != 'admin':
+        flash('Only administrators can delete subsidies')
+        return redirect(url_for('manage_subsidies'))
+        
+    conn = sqlite3.connect('farmer_app.db')
+    c = conn.cursor()
+    try:
+        c.execute('DELETE FROM subsidy_information WHERE SubsidyID = ?', (subsidy_id,))
+        conn.commit()
+        flash('Subsidy deleted successfully')
+    except Exception as e:
+        conn.rollback()
+        flash(f'Error deleting subsidy: {str(e)}')
+    finally:
+        conn.close()
+    return redirect(url_for('manage_subsidies'))
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        username = request.form['username']
+        email = request.form['email']
+        password = request.form['password']
+        confirm_password = request.form['confirm_password']
+        
+        if password != confirm_password:
+            flash('Passwords do not match', 'error')
+            return redirect(url_for('register'))
+        
+        conn = sqlite3.connect('farmer_app.db')
+        c = conn.cursor()
+        
+        try:
+            # Check if username already exists
+            existing_user = c.execute('SELECT * FROM user_information WHERE Username = ?', 
+                                    (username,)).fetchone()
+            if existing_user:
+                flash('Username already exists', 'error')
+                return redirect(url_for('register'))
+            
+            # Create new farmer account
+            hashed_password = generate_password_hash(password)
+            c.execute('''
+                INSERT INTO user_information (Name, Username, Password, Role, Region, PreferredCrops)
+                VALUES (?, ?, ?, 'farmer', NULL, NULL)
+            ''', (username, username, hashed_password))
+            
+            conn.commit()
+            flash('Registration successful! Please login.', 'success')
+            return redirect(url_for('login'))
+            
+        except Exception as e:
+            conn.rollback()
+            flash(f'Error during registration: {str(e)}', 'error')
+            return redirect(url_for('register'))
+        finally:
+            conn.close()
+            
+    return render_template('register.html')
+
+@app.route('/prediction_history')
+@login_required
+def prediction_history():
+    conn = sqlite3.connect('farmer_app.db')
+    c = conn.cursor()
+    try:
+        # Fetch user's prediction history
+        predictions = c.execute('''
+            SELECT 
+                PredictionID,
+                Timestamp,
+                Nitrogen,
+                Phosphorus,
+                Potassium,
+                Temperature,
+                Humidity,
+                pH,
+                Location,
+                PredictedCrop,
+                Probability
+            FROM prediction_history
+            WHERE UserID = ?
+            ORDER BY Timestamp DESC
+        ''', (session['user_id'],)).fetchall()
+        
+        return render_template('prediction_history.html', predictions=predictions)
+    except Exception as e:
+        flash(f'Error fetching prediction history: {str(e)}')
+        return redirect(url_for('dashboard'))
+    finally:
+        conn.close()
+
 if __name__ == '__main__':
-    app.run(debug=True, port=8080)  # Changed to port 8080 
+    app.run(debug=True, port=8080) 
