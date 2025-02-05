@@ -15,7 +15,7 @@ A web-based application that helps farmers make informed decisions about crop se
 
 - **Frontend**: HTML, CSS (Tailwind), JavaScript
 - **Backend**: Flask (Python)
-- **Database**: SQLite/PostgreSQL
+- **Database**: SQLite
 - **APIs**: OpenWeatherMap, OpenStreetMap
 - **ML**: scikit-learn
 
