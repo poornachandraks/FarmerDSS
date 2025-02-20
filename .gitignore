@@ -35,8 +35,8 @@ wheels/
 *.egg
 
 # Virtual Environment
+.venv/
 venv/
-ENV/
 env/
 Farmenv/
 
@@ -120,6 +120,3 @@ Farmenv/
 # OS generated files
 .DS_Store
 Thumbs.db 
-
-
-.venv/
