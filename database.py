@@ -16,29 +16,10 @@ def init_db():
             Username TEXT UNIQUE NOT NULL,
             Password TEXT NOT NULL,
             Role TEXT NOT NULL,
-            Region TEXT,
-            PreferredCrops TEXT
+            Region TEXT
         )
     ''')
     
-    # Create Prediction History table
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS prediction_history (
-            PredictionID INTEGER PRIMARY KEY AUTOINCREMENT,
-            UserID INTEGER NOT NULL,
-            Timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-            Nitrogen REAL,
-            Phosphorus REAL,
-            Potassium REAL,
-            Temperature REAL,
-            Humidity REAL,
-            pH REAL,
-            Location TEXT,
-            PredictedCrop TEXT,
-            Probability REAL,
-            FOREIGN KEY (UserID) REFERENCES user_information (UserID)
-        )
-    ''')
     
     # Create Crop Information table
     c.execute('''
@@ -82,11 +63,13 @@ def init_db():
     c.execute('''
         CREATE TABLE IF NOT EXISTS weather_data (
             WeatherID INTEGER PRIMARY KEY AUTOINCREMENT,
+            CropID INTEGER,
             Region TEXT NOT NULL,
             Month INTEGER CHECK (Month >= 1 AND Month <= 12),
             Year INTEGER,
             AverageRainfall FLOAT CHECK (AverageRainfall >= 0),
-            AverageTemperature FLOAT
+            AverageTemperature FLOAT,
+            FOREIGN KEY (CropID) REFERENCES crop_information (CropID)
         )
     ''')
     
@@ -94,24 +77,52 @@ def init_db():
     c.execute('''
         CREATE TABLE IF NOT EXISTS subsidy_information (
             SubsidyID INTEGER PRIMARY KEY AUTOINCREMENT,
-            CropID INTEGER,
             SubsidyName TEXT NOT NULL,
             EligibilityCriteria TEXT,
-            Amount FLOAT,
-            FOREIGN KEY (CropID) REFERENCES crop_information (CropID)
+            Amount FLOAT
+        )
+    ''')
+    
+    # Create supported_by table for many-to-many relationship
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS supported_by (
+            SubsidyID INTEGER,
+            CropID INTEGER,
+            PRIMARY KEY (SubsidyID, CropID),
+            FOREIGN KEY (SubsidyID) REFERENCES subsidy_information(SubsidyID) ON DELETE CASCADE,
+            FOREIGN KEY (CropID) REFERENCES crop_information(CropID) ON DELETE CASCADE
+        )
+    ''')
+    
+    # Create Preferred Crops table
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS preferred_crops (
+            PredictionID INTEGER PRIMARY KEY AUTOINCREMENT,
+            UserID INTEGER NOT NULL,
+            Timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            Nitrogen REAL,
+            Phosphorus REAL,
+            Potassium REAL,
+            Temperature REAL,
+            Humidity REAL,
+            pH REAL,
+            Location TEXT,
+            PredictedCrop TEXT,
+            Probability REAL,
+            FOREIGN KEY (UserID) REFERENCES user_information (UserID)
         )
     ''')
     
     # Insert a default admin user
     default_admin = ('Admin User', 'admin', 
                     generate_password_hash('admin123'), 
-                    'admin', 'All', 'All')
+                    'admin', 'All')
     
     try:
         c.execute('''
             INSERT INTO user_information 
-            (Name, Username, Password, Role, Region, PreferredCrops)
-            VALUES (?, ?, ?, ?, ?, ?)
+            (Name, Username, Password, Role, Region)
+            VALUES (?, ?, ?, ?, ?)
         ''', default_admin)
     except sqlite3.IntegrityError:
         pass  # Admin user already exists
@@ -172,55 +183,69 @@ def init_db():
     
     # Insert sample weather data
     sample_weather = [
-        ('North', 2024, 1100, 25),
-        ('South', 2024, 1300, 28),
-        ('East', 2024, 1500, 27),
-        ('West', 2024, 900, 24),
-        ('North', 2023, 1050, 26),
-        ('South', 2023, 1250, 29),
-        ('East', 2023, 1450, 28),
-        ('West', 2023, 850, 25),
-        ('North', 2022, 1000, 25),
-        ('South', 2022, 1200, 28),
-        ('East', 2022, 1400, 27),
-        ('West', 2022, 800, 24)
+        ('North',1,1,2024, 1100, 25),
+        ('South', 1, 1, 2024, 1300, 28),
+        ('East', 2, 1, 2024, 1500, 27),
+        ('West', 2, 1, 2024, 900, 24),
+        ('North', 3,12, 2023, 1050, 26),
+        ('South', 3,12, 2023, 1250, 29),
+        ('East',3, 12, 2023, 1450, 28),
+        ('West', 3, 12, 2023, 850, 25),
+        ('North', 4, 12, 2022, 1000, 25),
+        ('South', 4, 11, 2022, 1200, 28),
+        ('East', 5, 10, 2022, 1400, 27),
+        ('West', 6, 9, 2022, 800, 24) 
     ]
     
     for weather in sample_weather:
         try:
             c.execute('''
                 INSERT INTO weather_data 
-                (Region, Year, AverageRainfall, AverageTemperature)
-                VALUES (?, ?, ?, ?)
+                (Region, CropID, Month, Year, AverageRainfall, AverageTemperature)
+                VALUES (?, ?, ?, ?, ?, ?)
             ''', weather)
         except sqlite3.IntegrityError:
             pass
     
     # Insert sample subsidy data
     sample_subsidies = [
-        (1, 'Rice Support Scheme', 'Small Farmers', 5000),
-        (1, 'Paddy Bonus Scheme', 'All Farmers', 2000),
-        (2, 'Wheat Bonus', 'All Farmers', 3000),
-        (2, 'Winter Crop Support', 'Marginal Farmers', 4000),
-        (3, 'Cotton Price Support', 'Licensed Farmers', 7000),
-        (4, 'Maize Development Scheme', 'Tribal Farmers', 3500),
-        (5, 'Sugarcane Transport Subsidy', 'Registered Farmers', 6000),
-        (6, 'Potato Cold Storage Scheme', 'Co-operative Members', 2500),
-        (7, 'Vegetable Grower Support', 'Small Farmers', 1500),
-        (8, 'Organic Farming Initiative', 'Certified Organic Farmers', 8000),
-        (9, 'Oilseed Development Program', 'All Farmers', 4000),
-        (10, 'Special Rabi Crop Scheme', 'Small & Marginal Farmers', 3000)
+        ('Rice Support Scheme', 'Small Farmers', 5000),
+        ('Paddy Bonus Scheme', 'All Farmers', 2000),
+        ('Wheat Bonus', 'All Farmers', 3000),
+        ('Winter Crop Support', 'Marginal Farmers', 4000),
+        ('Cotton Price Support', 'Licensed Farmers', 7000),
+        ('Maize Development Scheme', 'Tribal Farmers', 3500),
+        ('Sugarcane Transport Subsidy', 'Registered Farmers', 6000),
+        ('Potato Cold Storage Scheme', 'Co-operative Members', 2500),
+        ('Vegetable Grower Support', 'Small Farmers', 1500),
+        ('Organic Farming Initiative', 'Certified Organic Farmers', 8000),
+        ('Oilseed Development Program', 'All Farmers', 4000),
+        ('Special Rabi Crop Scheme', 'Small & Marginal Farmers', 3000)
     ]
     
+    # Insert subsidies and their crop associations
     for subsidy in sample_subsidies:
         try:
             c.execute('''
                 INSERT INTO subsidy_information 
-                (CropID, SubsidyName, EligibilityCriteria, Amount)
-                VALUES (?, ?, ?, ?)
+                (SubsidyName, EligibilityCriteria, Amount)
+                VALUES (?, ?, ?)
             ''', subsidy)
+            
+            subsidy_id = c.lastrowid
+            
+            # Randomly assign 1-3 crops to each subsidy
+            num_crops = random.randint(1, 3)
+            crop_ids = random.sample(range(1, 11), num_crops)  # Assuming we have at least 10 crops
+            
+            for crop_id in crop_ids:
+                c.execute('''
+                    INSERT INTO supported_by (SubsidyID, CropID)
+                    VALUES (?, ?)
+                ''', (subsidy_id, crop_id))
+                
         except sqlite3.IntegrityError:
-            pass
+            pass  # Skip if entry already exists
     
     conn.commit()
     conn.close()

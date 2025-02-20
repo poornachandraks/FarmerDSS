@@ -11,10 +11,17 @@ import numpy as np
 import os
 from joblib import load
 import pandas as pd
-from config import FLASK_SECRET_KEY
+
+# Try to import from config, fallback to os.environ or generate a random key
+try:
+    from config import FLASK_SECRET_KEY
+except ImportError:
+    import os
+    import secrets
+    FLASK_SECRET_KEY = os.environ.get('FLASK_SECRET_KEY') or secrets.token_hex(16)
 
 app = Flask(__name__)
-app.secret_key = FLASK_SECRET_KEY  # Using value from config
+app.secret_key = FLASK_SECRET_KEY
 
 # Login required decorator
 def login_required(f):
@@ -112,7 +119,7 @@ def dashboard():
             ORDER BY c.CropName
         ''').fetchall()
         
-        # Fetch active subsidies
+        # Updated subsidy query to use the supported_by table
         subsidies = c.execute('''
             SELECT DISTINCT
                 c.CropName,
@@ -120,11 +127,8 @@ def dashboard():
                 s.EligibilityCriteria,
                 s.Amount
             FROM subsidy_information s
-            JOIN (
-                SELECT MIN(CropID) as CropID, CropName
-                FROM crop_information
-                GROUP BY CropName
-            ) c ON s.CropID = c.CropID
+            JOIN supported_by sb ON s.SubsidyID = sb.SubsidyID
+            JOIN crop_information c ON sb.CropID = c.CropID
             ORDER BY s.Amount DESC
         ''').fetchall()
         
@@ -296,7 +300,7 @@ def predict():
             c = conn.cursor()
             try:
                 c.execute('''
-                    INSERT INTO prediction_history 
+                    INSERT INTO preferred_crops 
                     (UserID, Nitrogen, Phosphorus, Potassium, Temperature, 
                      Humidity, pH, Location, PredictedCrop, Probability)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -587,31 +591,32 @@ def manage_subsidies():
     conn = sqlite3.connect('farmer_app.db')
     c = conn.cursor()
     try:
+        # Fetch all subsidies with their associated crops
         subsidies = c.execute('''
             SELECT DISTINCT
                 s.SubsidyID,
                 s.SubsidyName,
                 s.EligibilityCriteria,
                 s.Amount,
-                c.CropName
+                GROUP_CONCAT(c.CropName) as CropNames,
+                GROUP_CONCAT(c.CropID) as CropIDs
             FROM subsidy_information s
-            JOIN (
-                SELECT MIN(CropID) as CropID, CropName
-                FROM crop_information
-                GROUP BY CropName
-            ) c ON s.CropID = c.CropID
+            LEFT JOIN supported_by sb ON s.SubsidyID = sb.SubsidyID
+            LEFT JOIN crop_information c ON sb.CropID = c.CropID
+            GROUP BY s.SubsidyID
             ORDER BY s.Amount DESC
         ''').fetchall()
         
-        # Get unique crops for the add subsidy form
+        # Get all crops for the add/edit forms
         crops = c.execute('''
-            SELECT MIN(CropID) as CropID, CropName 
+            SELECT DISTINCT CropID, CropName 
             FROM crop_information 
-            GROUP BY CropName 
             ORDER BY CropName
         ''').fetchall()
         
-        return render_template('manage/subsidies.html', subsidies=subsidies, crops=crops)
+        return render_template('manage/subsidies.html', 
+                             subsidies=subsidies,
+                             crops=crops)
     except Exception as e:
         flash(f'Error fetching subsidies: {str(e)}')
         return redirect(url_for('dashboard'))
@@ -628,16 +633,32 @@ def add_subsidy():
     conn = sqlite3.connect('farmer_app.db')
     c = conn.cursor()
     try:
+        # Extract form data
         subsidy_name = request.form['subsidy_name']
         criteria = request.form['criteria']
         amount = float(request.form['amount'])
-        crop_id = int(request.form['crop_id'])
+        # Get list of selected crop IDs from form
+        crop_ids = request.form.getlist('crop_ids[]')  # Note the [] in the name
         
+        if not crop_ids:
+            flash('Please select at least one crop for the subsidy')
+            return redirect(url_for('manage_subsidies'))
+        
+        # Insert the subsidy
         c.execute('''
             INSERT INTO subsidy_information 
-            (SubsidyName, EligibilityCriteria, Amount, CropID)
-            VALUES (?, ?, ?, ?)
-        ''', (subsidy_name, criteria, amount, crop_id))
+            (SubsidyName, EligibilityCriteria, Amount)
+            VALUES (?, ?, ?)
+        ''', (subsidy_name, criteria, amount))
+        
+        subsidy_id = c.lastrowid
+        
+        # Insert entries into supported_by table for each selected crop
+        for crop_id in crop_ids:
+            c.execute('''
+                INSERT INTO supported_by (SubsidyID, CropID)
+                VALUES (?, ?)
+            ''', (subsidy_id, int(crop_id)))
         
         conn.commit()
         flash('Subsidy added successfully')
@@ -662,13 +683,31 @@ def edit_subsidy(subsidy_id):
         subsidy_name = request.form['subsidy_name']
         criteria = request.form['criteria']
         amount = float(request.form['amount'])
-        crop_id = int(request.form['crop_id'])
+        crop_ids = request.form.getlist('crop_ids[]')  # Get list of selected crops
         
+        if not crop_ids:
+            flash('Please select at least one crop for the subsidy')
+            return redirect(url_for('manage_subsidies'))
+        
+        # Start transaction
+        conn.execute('BEGIN TRANSACTION')
+        
+        # Update subsidy information
         c.execute('''
             UPDATE subsidy_information 
-            SET SubsidyName=?, EligibilityCriteria=?, Amount=?, CropID=?
+            SET SubsidyName=?, EligibilityCriteria=?, Amount=?
             WHERE SubsidyID=?
-        ''', (subsidy_name, criteria, amount, crop_id, subsidy_id))
+        ''', (subsidy_name, criteria, amount, subsidy_id))
+        
+        # Remove all existing crop associations
+        c.execute('DELETE FROM supported_by WHERE SubsidyID = ?', (subsidy_id,))
+        
+        # Add new crop associations
+        for crop_id in crop_ids:
+            c.execute('''
+                INSERT INTO supported_by (SubsidyID, CropID)
+                VALUES (?, ?)
+            ''', (subsidy_id, int(crop_id)))
         
         conn.commit()
         flash('Subsidy updated successfully')
@@ -690,7 +729,15 @@ def delete_subsidy(subsidy_id):
     conn = sqlite3.connect('farmer_app.db')
     c = conn.cursor()
     try:
+        # Start transaction
+        conn.execute('BEGIN TRANSACTION')
+        
+        # Delete from supported_by first (due to foreign key constraint)
+        c.execute('DELETE FROM supported_by WHERE SubsidyID = ?', (subsidy_id,))
+        
+        # Then delete the subsidy
         c.execute('DELETE FROM subsidy_information WHERE SubsidyID = ?', (subsidy_id,))
+        
         conn.commit()
         flash('Subsidy deleted successfully')
     except Exception as e:
@@ -749,7 +796,6 @@ def prediction_history():
     conn = sqlite3.connect('farmer_app.db')
     c = conn.cursor()
     try:
-        # Fetch user's prediction history
         predictions = c.execute('''
             SELECT 
                 PredictionID,
@@ -763,7 +809,7 @@ def prediction_history():
                 Location,
                 PredictedCrop,
                 Probability
-            FROM prediction_history
+            FROM preferred_crops
             WHERE UserID = ?
             ORDER BY Timestamp DESC
         ''', (session['user_id'],)).fetchall()
