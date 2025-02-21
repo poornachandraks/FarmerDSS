@@ -773,8 +773,8 @@ def register():
             # Create new farmer account
             hashed_password = generate_password_hash(password)
             c.execute('''
-                INSERT INTO user_information (Name, Username, Password, Role, Region, PreferredCrops)
-                VALUES (?, ?, ?, 'farmer', NULL, NULL)
+                INSERT INTO user_information (Name, Username, Password, Role, Region)
+                VALUES (?, ?, ?, 'farmer', NULL)
             ''', (username, username, hashed_password))
             
             conn.commit()
@@ -798,7 +798,7 @@ def prediction_history():
     try:
         predictions = c.execute('''
             SELECT 
-                PredictionID,
+                UserID,
                 Timestamp,
                 Nitrogen,
                 Phosphorus,

@@ -97,7 +97,6 @@ def init_db():
     # Create Preferred Crops table
     c.execute('''
         CREATE TABLE IF NOT EXISTS preferred_crops (
-            PredictionID INTEGER PRIMARY KEY AUTOINCREMENT,
             UserID INTEGER NOT NULL,
             Timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
             Nitrogen REAL,
@@ -109,6 +108,7 @@ def init_db():
             Location TEXT,
             PredictedCrop TEXT,
             Probability REAL,
+            PRIMARY KEY (UserID, Timestamp),
             FOREIGN KEY (UserID) REFERENCES user_information (UserID)
         )
     ''')
